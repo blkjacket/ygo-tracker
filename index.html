@@ -2279,10 +2279,15 @@
   .ban-badge.limited   { background:rgba(220,120,20,0.2); color:#ffaa44; border:1px solid rgba(220,120,20,0.35); }
   .ban-badge.semi      { background:rgba(200,180,20,0.2); color:#ddcc44; border:1px solid rgba(200,180,20,0.35); }
   .ban-badge.unlimited { background:rgba(60,180,60,0.12); color:#88cc88; border:1px solid rgba(60,180,60,0.25); }
+  .genesys-badge { display:inline-flex; align-items:center; gap:3px; background:rgba(80,140,255,0.12); color:#88bbff; border:1px solid rgba(80,140,255,0.3); border-radius:3px; font-family:'Cinzel',serif; font-size:9px; letter-spacing:1px; padding:2px 5px; white-space:nowrap; }
+  .genesys-badge.points-high { background:rgba(220,80,80,0.15); color:#ff9999; border-color:rgba(220,80,80,0.35); }
+  .genesys-badge.points-mid  { background:rgba(220,150,30,0.15); color:#ffcc66; border-color:rgba(220,150,30,0.35); }
+  .genesys-badge.points-low  { background:rgba(80,180,255,0.12); color:#88ccff; border-color:rgba(80,180,255,0.3); }
   .csearch-card-ban {
     position:absolute; bottom:44px; left:50%; transform:translateX(-50%);
+    display:flex; flex-wrap:wrap; gap:3px; align-items:center; justify-content:center;
     font-family:'Cinzel',serif; font-size:8px; letter-spacing:1px; font-weight:700;
-    padding:2px 6px; border-radius:2px; white-space:nowrap; pointer-events:none;
+    pointer-events:none;
   }
   .csearch-card { position:relative; }
   .cdetail-ban { margin-bottom:18px; }
@@ -2753,10 +2758,6 @@
   <div class="timer-block" title="Turn number">
     <span class="timer-label">Turn</span>
     <span class="timer-value" id="turnCounterDisplay" style="font-size:20px;min-width:40px;">0</span>
-  </div>
-  <div class="timer-block" title="Total match time">
-    <span class="timer-label">Match</span>
-    <span class="timer-value" id="matchTimerDisplay" style="font-size:16px;min-width:52px;color:rgba(180,220,255,0.8);">00:00</span>
   </div>
   <div class="timer-sep"></div>
   <button class="timer-btn start" id="timerToggleBtn" onclick="timerToggle()">▶ Start</button>
@@ -6900,7 +6901,7 @@
     _cardIdbGet().then(function(stored) {
       if (stored && stored.cards && stored.cards.length > 1000) {
         // Check if cached DB has banlist field — if not, re-download silently
-        var needsRefresh = stored.cards[0] && stored.cards[0].banlist === undefined;
+        var needsRefresh = stored.cards[0] && (stored.cards[0].banlist === undefined || stored.cards[0].genesys === undefined);
         if (needsRefresh) {
           _setCardDbStatus('⬇️ UPDATING DB (banlist)…', 'var(--gold)');
           cardDbDownload(false);
@@ -6929,7 +6930,7 @@
       _cardDb = null;
       _cardDbReady = false;
     }
-    fetch('https://db.ygoprodeck.com/api/v7/cardinfo.php?misc=yes')
+    fetch('https://db.ygoprodeck.com/api/v7/cardinfo.php?misc=yes&format=genesys')
       .then(function(r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
@@ -6956,6 +6957,7 @@
             linkval:  c.linkval  != null ? c.linkval : null,
             scale:    c.scale    != null ? c.scale : null,
             banlist:  ban.ban_tcg || '',   // TCG ban status
+            genesys:  (c.misc_info && c.misc_info[0] && c.misc_info[0].genesys_points) ? c.misc_info[0].genesys_points : 0,
             card_images: c.card_images ? [{ id: c.card_images[0].id }] : [{ id: c.id }]
           };
         });
@@ -7065,6 +7067,11 @@
     var cls = banStatus === 'Forbidden' ? 'forbidden' : banStatus === 'Limited' ? 'limited' : 'semi';
     return '<span class="ban-badge ' + cls + '">' + banStatus + '</span>';
   }
+  function _genesysBadgeHTML(pts) {
+    if (!pts || pts === 0) return '';
+    var cls = pts >= 30 ? 'points-high' : pts >= 10 ? 'points-mid' : 'points-low';
+    return '<span class="genesys-badge ' + cls + '">⬡ ' + pts + ' pts</span>';
+  }
 
   // ── Card Search Modal ────────────────────────────────────────
   function openCardSearch() {
@@ -7142,6 +7149,7 @@
         cards = cards.map(function(c) {
           var ban = c.banlist_info || {};
           c.banlist = ban.ban_tcg || '';
+          c.genesys = (c.misc_info && c.misc_info[0] && c.misc_info[0].genesys_points) ? c.misc_info[0].genesys_points : 0;
           return c;
         });
         if (!cards.length) { status.textContent = 'NO RESULTS FOUND'; return; }
@@ -7162,13 +7170,17 @@
       var thumb  = 'https://images.ygoprodeck.com/images/cards_small/' + img_id + '.jpg';
       var ban    = card.banlist || '';
       var banCls = ban === 'Forbidden' ? 'forbidden' : ban === 'Limited' ? 'limited' : ban === 'Semi-Limited' ? 'semi' : '';
+      var gPts   = card.genesys || 0;
       var inDeck = _deckCountFor(card.id);
       var div = document.createElement('div');
       div.className = 'csearch-card';
       div.dataset.cardId = card.id;
+      var banLineHTML = '';
+      if (banCls) banLineHTML += '<span class="ban-badge ' + banCls + '">' + ban + '</span>';
+      if (gPts > 0) banLineHTML += _genesysBadgeHTML(gPts);
       div.innerHTML =
         '<img src="' + thumb + '" alt="' + card.name.replace(/"/g,'') + '" loading="lazy" onerror="this.style.opacity=0.2">'
-        + (banCls ? '<div class="csearch-card-ban ban-badge ' + banCls + '">' + ban + '</div>' : '')
+        + (banLineHTML ? '<div class="csearch-card-ban">' + banLineHTML + '</div>' : '')
         + (inDeck ? '<div class="csearch-card-deck-count">×' + inDeck + '</div>' : '')
         + '<button class="csearch-card-add" title="Add to deck">+</button>'
         + '<div class="csearch-card-name">' + card.name + '</div>';
@@ -7209,16 +7221,18 @@
     var banEl = document.getElementById('cdetailBan');
     if (banEl) {
       if (card.banlist !== undefined) {
-        banEl.innerHTML = _banBadgeHTML(card.banlist);
+        banEl.innerHTML = _banBadgeHTML(card.banlist) + _genesysBadgeHTML(card.genesys || 0);
       } else {
         banEl.innerHTML = '<span style="font-family:\'Cinzel\',serif;font-size:10px;color:var(--dim);letter-spacing:2px;">CHECKING BAN STATUS…</span>';
-        fetch('https://db.ygoprodeck.com/api/v7/cardinfo.php?id=' + card.id + '&misc=yes')
+        fetch('https://db.ygoprodeck.com/api/v7/cardinfo.php?id=' + card.id + '&misc=yes&format=genesys')
           .then(function(r){ return r.json(); })
           .then(function(d){
             var c = d.data && d.data[0];
             var ban = (c && c.banlist_info && c.banlist_info.ban_tcg) || '';
-            banEl.innerHTML = _banBadgeHTML(ban);
+            var gPts = (c && c.misc_info && c.misc_info[0] && c.misc_info[0].genesys_points) || 0;
+            banEl.innerHTML = _banBadgeHTML(ban) + _genesysBadgeHTML(gPts);
             card.banlist = ban;
+            card.genesys = gPts;
           })
           .catch(function(){ banEl.innerHTML = ''; });
       }
@@ -8489,22 +8503,6 @@
     showToast('Rematch! 🎴 Good luck', 'info');
   }
 
-  // Match timer
-  var _matchTimerInterval = null;
-  function startMatchTimer() {
-    if (_matchTimerInterval) return;
-    _matchTimerInterval = setInterval(function() {
-      if (!matchStartTime) return;
-      var secs = Math.floor((Date.now() - matchStartTime) / 1000);
-      var m = String(Math.floor(secs / 60)).padStart(2,'0');
-      var s = String(secs % 60).padStart(2,'0');
-      var el = document.getElementById('matchTimerDisplay');
-      if (el) el.textContent = m + ':' + s;
-    }, 1000);
-  }
-  startMatchTimer();
-
-
 
   /* ═══════════════════════════════════════════════════════════
      VOICE CONTROL — Web Speech API
@@ -8515,262 +8513,335 @@
     var _active   = false;
     var _restartOnEnd = false;
 
-    // ── word-to-number map ────────────────────────────────────
+    // ── word-to-number ──────────────────────────────────────────
     var W2N = {
       zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
       eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,
       eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,
-      seventy:70,eighty:80,ninety:90,hundred:100,thousand:1000,
-      a:1,an:1, half:0 /* special */
+      seventy:70,eighty:80,ninety:90,hundred:100,thousand:1000,a:1,an:1
     };
     function wordsToNum(str) {
-      // strip punctuation, lowercase
       var s = str.toLowerCase().replace(/[^a-z0-9\s]/g,'').trim();
-      // first try direct integer parse
       var direct = parseInt(s.replace(/,/g,''));
       if (!isNaN(direct)) return direct;
-
-      var tokens = s.split(/\s+/);
-      var total = 0, current = 0;
+      var tokens = s.split(/\s+/), total = 0, current = 0;
       for (var i = 0; i < tokens.length; i++) {
-        var w = tokens[i];
-        if (W2N[w] === undefined) continue;
-        var n = W2N[w];
-        if (n === 100) { current = (current || 1) * 100; }
-        else if (n === 1000) { total += (current || 1) * 1000; current = 0; }
-        else { current += n; }
+        var n = W2N[tokens[i]];
+        if (n === undefined) continue;
+        if (n === 100)      { current = (current || 1) * 100; }
+        else if (n === 1000){ total += (current || 1) * 1000; current = 0; }
+        else                { current += n; }
       }
       total += current;
       return total > 0 ? total : NaN;
     }
 
-    // Find player index by name or "player N" pattern
+    // ── resolve player by name or "player N" ────────────────────
     function findPlayer(str) {
-      str = str.toLowerCase().trim();
-      // "player 1", "player one", "p2", etc
+      if (!str) return -1;
+      str = str.trim().toLowerCase();
       var byNum = str.match(/^(?:player\s*)?(\w+)$/);
       if (byNum) {
         var n = parseInt(byNum[1]);
         if (isNaN(n)) n = W2N[byNum[1]];
         if (!isNaN(n) && n >= 1 && n <= players.length) return n - 1;
       }
-      // by name (fuzzy — starts with)
-      var low = str.toLowerCase();
       for (var i = 0; i < players.length; i++) {
-        if (players[i].name.toLowerCase().startsWith(low) || low.startsWith(players[i].name.toLowerCase())) return i;
+        if (players[i].name.toLowerCase().startsWith(str) || str.startsWith(players[i].name.toLowerCase())) return i;
       }
       return -1;
     }
 
-    // Announce result in HUD
-    function setHeard(text) {
-      var el = document.getElementById('voiceHeard');
-      if (el) el.textContent = text ? '"' + text + '"' : '';
-    }
-    function setResult(text, type) {
-      var el = document.getElementById('voiceResult');
-      if (!el) return;
-      el.textContent = text;
-      el.className = 'vh-result' + (type ? ' ' + type : '');
+    // ── HUD helpers ─────────────────────────────────────────────
+    function setHeard(t)      { var e=document.getElementById('voiceHeard');  if(e) e.textContent = t ? '"'+t+'"' : ''; }
+    function setResult(t, cls){ var e=document.getElementById('voiceResult'); if(!e) return; e.textContent=t; e.className='vh-result'+(cls?' '+cls:''); }
+
+    // ── default damage target ────────────────────────────────────
+    function defaultDmgTarget() {
+      var t = players.findIndex(function(p,pi){ return pi !== activeTurn && !p.eliminated; });
+      return t >= 0 ? t : activeTurn;
     }
 
-    // ── Main command parser ───────────────────────────────────
+    // ── MAIN COMMAND PARSER ──────────────────────────────────────
     function handleCommand(raw) {
       setHeard(raw);
-      var t = raw.toLowerCase().trim();
+      var t = raw.toLowerCase().trim().replace(/[.,!?]+$/, '');
 
-      // NEXT TURN
-      if (/^next turn/.test(t) || t === 'advance turn') {
+      // ── TURN & PHASE ──────────────────────────────────────────
+      if (/^(next turn|end turn|your turn|advance turn|pass turn)/.test(t)) {
         nextTurn(); setResult('Next turn ✓', 'ok'); return;
       }
-
-      // NEXT PHASE / specific phase
-      if (/^next phase/.test(t) || t === 'advance phase' || t === 'advance') {
+      if (/^(previous turn|prev turn|go back|back turn)/.test(t)) {
+        prevTurn(); setResult('Previous turn ✓', 'ok'); return;
+      }
+      if (/^(next phase|advance phase|advance|proceed)$/.test(t)) {
         advancePhase(); setResult('Phase advanced ✓', 'ok'); return;
       }
-      var phaseNames = ['draw','standby','main one','main 1','battle','main two','main 2','end'];
-      var phaseMap   = { draw:0, standby:1, 'main one':2, 'main 1':2, battle:3, 'main two':4, 'main 2':4, end:5 };
+      var phaseMap = {draw:0,standby:1,'main one':2,'main 1':2,'first main':2,battle:3,'main two':4,'main 2':4,'second main':4,'end phase':5,end:5};
       for (var ph in phaseMap) {
-        if (t.startsWith(ph + ' phase') || t === ph) {
-          setPhase(phaseMap[ph]); setResult('Phase: ' + PHASES[phaseMap[ph]] + ' ✓', 'ok'); return;
+        if (t === ph || t === ph+' phase' || t.startsWith(ph+' phase') || t.startsWith('go to '+ph)) {
+          setPhase(phaseMap[ph]); setResult('Phase: '+PHASES[phaseMap[ph]]+' ✓','ok'); return;
         }
       }
 
-      // UNDO
-      if (/^undo/.test(t)) {
-        undoLP(activeTurn); setResult('Undone ✓', 'ok'); return;
-      }
-
-      // HALF
-      if (t === 'half' || t === 'half lp' || t === 'halve') {
-        applyHalfLP(activeTurn); setResult('Half LP applied ✓', 'ok'); return;
-      }
-
-      // SURRENDER
-      if (/^surrender/.test(t) || /^concede/.test(t)) {
-        surrenderPlayer(activeTurn); setResult('Surrender confirmed', 'ok'); return;
-      }
-
-      // NEW GAME
-      if (/^new game/.test(t) || /^reset/.test(t)) {
-        confirmNewGame(); setResult('New game…', 'ok'); return;
-      }
-
-      // COMMANDS / HELP
-      if (/^commands?/.test(t) || /^help/.test(t)) {
-        openVoiceCmds(); setResult('Command list opened', 'ok'); return;
-      }
-
-      // DAMAGE / DEAL ──────────────────────────────────────────
-      // Patterns: "damage 800", "deal 800", "800 damage",
-      //           "deal 800 to player 2", "damage player 2 800"
-      var dmgMatch = t.match(/^(?:damage|deal|hit)\s+(.+)$/) || t.match(/^(.+?)\s+damage$/);
-      if (dmgMatch) {
-        var body = dmgMatch[1];
-        // extract "to player X" or "player X" target
-        var targetIdx = activeTurn; // default: self takes damage? No — active player DEALS damage to opponent
-        // Default target: first non-active non-eliminated player
-        var defaultTarget = players.findIndex(function(p, pi) { return pi !== activeTurn && !p.eliminated; });
-        if (defaultTarget >= 0) targetIdx = defaultTarget;
-
-        var toMatch = body.match(/(?:to\s+)(.+?)(?:\s+(\d[\d,]*|\w+))?$/);
-        if (toMatch) {
-          var maybeTarget = findPlayer(toMatch[1]);
-          if (maybeTarget >= 0) { targetIdx = maybeTarget; body = body.replace(/\s+to\s+\S+(\s+\S+)?$/, '').trim(); }
-        }
-        // Also check "player N" at start
-        var plFirst = body.match(/^(?:player\s+\w+)\s+(.+)$/);
-        if (plFirst) {
-          var pi = findPlayer(body.split(/\s+/).slice(0,2).join(' '));
-          if (pi >= 0) { targetIdx = pi; body = plFirst[1]; }
-        }
-
+      // ── LP — DAMAGE ───────────────────────────────────────────
+      // "damage 800", "deal 800", "hit 800", "take 800", "800 damage"
+      // "deal 800 to player 2", "hit player 2 for 800", "damage player 2 800"
+      var dmgPat = t.match(/^(?:damage|deal|hit|take|apply)\s+(.+)$/) || t.match(/^(.+?)\s+(?:damage|dmg)$/);
+      if (dmgPat) {
+        var body = dmgPat[1];
+        var tgt = defaultDmgTarget();
+        // "to player N" suffix
+        var toM = body.match(/^(.+?)\s+to\s+(.+)$/);
+        if (toM) { var pi=findPlayer(toM[2]); if(pi>=0){tgt=pi; body=toM[1];} }
+        // "player N" prefix
+        var plM = body.match(/^(player\s+\w+)\s+(.+)$/);
+        if (plM) { var pi2=findPlayer(plM[1]); if(pi2>=0){tgt=pi2; body=plM[2];} }
+        // "for N" suffix
+        body = body.replace(/^for\s+/,'');
         var amt = wordsToNum(body);
-        if (!isNaN(amt) && amt > 0) {
-          if (players[targetIdx] && !players[targetIdx].eliminated) {
-            adjustLP(targetIdx, -amt, 'effect', activeTurn);
-            setResult('−' + amt.toLocaleString() + ' LP → ' + players[targetIdx].name + ' ✓', 'ok');
-          } else {
-            setResult('Invalid target player', 'err');
-          }
-          return;
+        if (!isNaN(amt) && amt > 0 && players[tgt] && !players[tgt].eliminated) {
+          adjustLP(tgt, -amt, dmgTypeState[activeTurn]||'effect', activeTurn);
+          setResult('-'+amt.toLocaleString()+' → '+players[tgt].name+' ✓','ok'); return;
+        }
+      }
+      // bare number = damage to default target  e.g. "800"
+      var bareNum = wordsToNum(t);
+      if (!isNaN(bareNum) && bareNum > 0) {
+        var tgt0 = defaultDmgTarget();
+        if (players[tgt0] && !players[tgt0].eliminated) {
+          adjustLP(tgt0, -bareNum, dmgTypeState[activeTurn]||'effect', activeTurn);
+          setResult('-'+bareNum.toLocaleString()+' → '+players[tgt0].name+' ✓','ok'); return;
         }
       }
 
-      // HEAL ───────────────────────────────────────────────────
-      // Patterns: "heal 500", "heal player 2 500", "heal 500 to player 1"
-      var healMatch = t.match(/^heal\s+(.+)$/);
-      if (healMatch) {
-        var hbody = healMatch[1];
-        var htarget = activeTurn;
-        // "player N" at start?
-        var hpi = hbody.match(/^(?:player\s+\w+)\s+(.+)$/);
-        if (hpi) { var hpidx = findPlayer(hbody.split(/\s+/).slice(0,2).join(' ')); if (hpidx >= 0) { htarget = hpidx; hbody = hpi[1]; } }
-        // "to player N"?
-        var hto = hbody.match(/^(.+?)\s+to\s+(.+)$/);
-        if (hto) { var htoi = findPlayer(hto[2]); if (htoi >= 0) { htarget = htoi; hbody = hto[1]; } }
-
+      // ── LP — HEAL ────────────────────────────────────────────
+      var healPat = t.match(/^(?:heal|restore|gain|recover|add)\s+(.+)$/);
+      if (healPat) {
+        var hbody = healPat[1], htgt = activeTurn;
+        var hplM = hbody.match(/^(player\s+\w+)\s+(.+)$/);
+        if (hplM) { var hpi=findPlayer(hplM[1]); if(hpi>=0){htgt=hpi; hbody=hplM[2];} }
+        var htoM = hbody.match(/^(.+?)\s+to\s+(.+)$/);
+        if (htoM) { var hpi2=findPlayer(htoM[2]); if(hpi2>=0){htgt=hpi2; hbody=htoM[1];} }
+        hbody = hbody.replace(/^for\s+/,'');
         var hamt = wordsToNum(hbody);
-        if (!isNaN(hamt) && hamt > 0) {
-          if (players[htarget] && !players[htarget].eliminated) {
-            adjustLP(htarget, hamt, 'heal', null);
-            setResult('+' + hamt.toLocaleString() + ' LP → ' + players[htarget].name + ' ✓', 'ok');
-          } else {
-            setResult('Invalid target player', 'err');
-          }
-          return;
+        if (!isNaN(hamt) && hamt > 0 && players[htgt] && !players[htgt].eliminated) {
+          adjustLP(htgt, hamt, 'heal', null);
+          setResult('+'+hamt.toLocaleString()+' → '+players[htgt].name+' ✓','ok'); return;
         }
       }
 
-      // "800 to player 2" shorthand (damage)
-      var shortDmg = t.match(/^([\d,]+(?:\s+\w+)*?)\s+to\s+(.+)$/);
-      if (shortDmg) {
-        var sdAmt = wordsToNum(shortDmg[1]);
-        var sdTgt = findPlayer(shortDmg[2]);
-        if (!isNaN(sdAmt) && sdAmt > 0 && sdTgt >= 0 && !players[sdTgt].eliminated) {
-          adjustLP(sdTgt, -sdAmt, 'effect', activeTurn);
-          setResult('−' + sdAmt.toLocaleString() + ' LP → ' + players[sdTgt].name + ' ✓', 'ok');
-          return;
+      // ── LP — HIT ALL ─────────────────────────────────────────
+      var allPat = t.match(/^(?:hit all|damage all|deal all|all players)\s+(.+)$/);
+      if (allPat) {
+        var allAmt = wordsToNum(allPat[1]);
+        if (!isNaN(allAmt) && allAmt > 0) {
+          var hit = 0;
+          players.forEach(function(p,pi){ if(pi!==activeTurn&&!p.eliminated){ adjustLP(pi,-allAmt,dmgTypeState[activeTurn]||'effect',activeTurn); hit++; } });
+          setResult('Hit all: -'+allAmt.toLocaleString()+' × '+hit+' ✓','ok'); return;
         }
       }
 
-      setResult('Command not recognised', 'err');
+      // ── LP — HALF ────────────────────────────────────────────
+      if (/^(half|halve|half lp|halve lp|half life points)/.test(t)) {
+        var halfTgt = activeTurn;
+        var halfPl = t.match(/(?:player\s+\w+|\w+)\s*$/);
+        if (halfPl) { var hpi3=findPlayer(halfPl[0]); if(hpi3>=0) halfTgt=hpi3; }
+        applyHalfLP(halfTgt); setResult('Half LP → '+players[halfTgt].name+' ✓','ok'); return;
+      }
+
+      // ── LP — UNDO ────────────────────────────────────────────
+      if (/^(undo|take back|revert|undo lp)/.test(t)) {
+        undoLP(activeTurn); setResult('Undone ✓','ok'); return;
+      }
+
+      // ── LP — RESET ───────────────────────────────────────────
+      if (/^(reset lp|reset life|reset all lp|reset all life)/.test(t)) {
+        resetAllLP(); setResult('All LP reset ✓','ok'); return;
+      }
+
+      // ── LP — TRANSFER ────────────────────────────────────────
+      if (/^(transfer lp|give lp|send lp|transfer life|open transfer)/.test(t)) {
+        openTransfer(activeTurn); setResult('Transfer panel opened','ok'); return;
+      }
+
+      // ── TIMER ────────────────────────────────────────────────
+      if (/^(start timer|start clock|begin timer|resume timer)/.test(t)) {
+        timerStart(); setResult('Timer started ✓','ok'); return;
+      }
+      if (/^(pause timer|pause clock|stop clock|pause)$/.test(t)) {
+        timerPause(); setResult('Timer paused ✓','ok'); return;
+      }
+      if (/^(stop timer|end timer)$/.test(t)) {
+        timerStop(); setResult('Timer stopped ✓','ok'); return;
+      }
+
+      // ── COIN & DICE ──────────────────────────────────────────
+      if (/^(flip coin|coin flip|flip a coin|toss coin)/.test(t)) {
+        openCoinDice();
+        setTimeout(function(){ flipCoin(); }, 200);
+        setResult('Flipping coin… ✓','ok'); return;
+      }
+      if (/^(roll dice|roll die|roll a dice|roll the dice|roll)$/.test(t)) {
+        openCoinDice();
+        setTimeout(function(){ rollDice(); }, 200);
+        setResult('Rolling dice… ✓','ok'); return;
+      }
+      if (/^(coin and dice|coin dice|open dice|open coin)/.test(t)) {
+        openCoinDice(); setResult('Coin & Dice opened','ok'); return;
+      }
+
+      // ── GAME CONTROL ─────────────────────────────────────────
+      if (/^(surrender|concede|forfeit|give up|i surrender|i concede)/.test(t)) {
+        surrenderPlayer(activeTurn); setResult('Surrender initiated','ok'); return;
+      }
+      if (/^(eliminate player|knock out player|ko player)/.test(t)) {
+        var elimM = t.match(/(?:player\s+\w+|\w+)\s*$/);
+        if (elimM) { var epi=findPlayer(elimM[0]); if(epi>=0){ toggleElim(epi); setResult('Eliminated: '+players[epi].name+' ✓','ok'); return; } }
+      }
+      if (/^(revive|second chance|bring back|restore player)/.test(t)) {
+        var revTgt = activeTurn;
+        var revM = t.match(/(?:player\s+\w+|\w+)\s*$/);
+        if (revM) { var rpi=findPlayer(revM[0]); if(rpi>=0) revTgt=rpi; }
+        secondChance(revTgt); setResult('Revived: '+players[revTgt].name+' ✓','ok'); return;
+      }
+      if (/^(new game|reset game|reset|start over|start new game)/.test(t)) {
+        confirmNewGame(); setResult('New game…','ok'); return;
+      }
+      if (/^(rematch|play again|replay|another game)/.test(t)) {
+        rematch(); setResult('Rematch! ✓','ok'); return;
+      }
+
+      // ── PLAYER COUNT ─────────────────────────────────────────
+      var cntM = t.match(/^(?:set\s+)?(?:(\w+)\s+)?players?(?:\s+(\w+))?$/);
+      if (cntM) {
+        var numStr = cntM[1] || cntM[2];
+        var cnt = wordsToNum(numStr||'');
+        if (!isNaN(cnt) && cnt >= 2 && cnt <= 6) {
+          setPlayerCount(cnt); setResult(cnt+' players set ✓','ok'); return;
+        }
+      }
+
+      // ── COUNTER TOKENS ───────────────────────────────────────
+      if (/^(add counter|add token|new counter|new token)/.test(t)) {
+        promptAddToken(activeTurn); setResult('Add counter…','ok'); return;
+      }
+
+      // ── MODALS ───────────────────────────────────────────────
+      if (/^(calculator|calc|open calc|open calculator)/.test(t)) {
+        openCalc(); setResult('Calculator opened','ok'); return;
+      }
+      if (/^(game log|show log|open log|view log)/.test(t)) {
+        openLog(); setResult('Game log opened','ok'); return;
+      }
+      if (/^(match record|match history|show history|show record)/.test(t)) {
+        openMatchHistory(); setResult('Match history opened','ok'); return;
+      }
+      if (/^(card search|search cards|open cards|find card|cards)$/.test(t)) {
+        openCardSearch(); setResult('Card search opened','ok'); return;
+      }
+      if (/^(deck builder|open deck|my deck|view deck)/.test(t)) {
+        openCardSearch();
+        setTimeout(function(){ toggleDeckBuilder(); }, 200);
+        setResult('Deck builder opened','ok'); return;
+      }
+      if (/^(rulings|open rulings|check ruling|ask ruling|rulings search)/.test(t)) {
+        openRulings(); setResult('Rulings opened','ok'); return;
+      }
+      if (/^(roster|open roster|show roster|player roster)/.test(t)) {
+        openRoster(); setResult('Roster opened','ok'); return;
+      }
+      if (/^(sync|multiplayer|online|open sync|room)/.test(t)) {
+        openSyncModal(); setResult('Sync panel opened','ok'); return;
+      }
+      if (/^(fullscreen|full screen|toggle fullscreen)/.test(t)) {
+        toggleFullscreen(); setResult('Fullscreen toggled','ok'); return;
+      }
+      if (/^(close|close modal|dismiss|exit|go back)$/.test(t)) {
+        // Close whatever modal is open
+        var modals = ['logModal','calcModal','rosterModal','rulesModal','playersModal','modeModal','syncModal','summaryOverlay','coinDiceModal','cardSearchModal','rulingsModal'];
+        var closed = false;
+        modals.forEach(function(id){ var m=document.getElementById(id); if(m&&(m.classList.contains('open')||m.style.display==='flex')){ m.classList.remove('open'); if(id==='summaryOverlay') closeSummary(false); closed=true; } });
+        setResult(closed ? 'Closed ✓' : 'Nothing to close', closed?'ok':''); return;
+      }
+
+      // ── RULINGS ACTIONS ──────────────────────────────────────
+      if (/^(ask the ruling|get ruling|check the ruling|ruling query)/.test(t)) {
+        if (typeof askRuling === 'function') { askRuling(); setResult('Asking ruling…','ok'); return; }
+      }
+      if (/^(add chain link|chain link|add to chain)/.test(t)) {
+        if (typeof addChainLink === 'function') { addChainLink(); setResult('Chain link added ✓','ok'); return; }
+      }
+      if (/^(remove chain link|remove from chain)/.test(t)) {
+        if (typeof removeChainLink === 'function') { removeChainLink(); setResult('Chain link removed ✓','ok'); return; }
+      }
+      if (/^(clear ruling|clear chain|reset ruling)/.test(t)) {
+        if (typeof clearRulingBuilder === 'function') { clearRulingBuilder(); setResult('Ruling cleared ✓','ok'); return; }
+      }
+
+      // ── HELP ─────────────────────────────────────────────────
+      if (/^(commands|help|what can i say|voice commands|list commands)/.test(t)) {
+        openVoiceCmds(); setResult('Command list opened','ok'); return;
+      }
+
+      setResult('Not recognised — try "commands" for help','err');
     }
 
-    // ── Start / stop ──────────────────────────────────────────
+    // ── Start / Stop ─────────────────────────────────────────────
     window.toggleVoice = function() {
-      if (!SpeechRec) { showToast('Voice control not supported in this browser', 'warning'); return; }
+      if (!SpeechRec) { showToast('Voice control not supported in this browser','warning'); return; }
       if (_active) stopVoice(); else startVoice();
     };
-
     window.startVoice = function() {
       if (_active) return;
-      if (!SpeechRec) { showToast('Voice control not supported in this browser', 'warning'); return; }
+      if (!SpeechRec) { showToast('Voice control not supported in this browser','warning'); return; }
       _rec = new SpeechRec();
       _rec.lang = 'en-US';
       _rec.continuous = true;
       _rec.interimResults = true;
       _rec.maxAlternatives = 1;
-
       _rec.onstart = function() {
-        _active = true;
-        _restartOnEnd = true;
+        _active = true; _restartOnEnd = true;
         var btn = document.getElementById('voiceBtn');
         if (btn) btn.classList.add('listening');
         var hud = document.getElementById('voiceHUD');
         if (hud) hud.classList.add('active');
         setHeard(''); setResult('Say a command…');
       };
-
       _rec.onresult = function(e) {
-        var interim = '', final = '';
+        var interim = '', final_ = '';
         for (var i = e.resultIndex; i < e.results.length; i++) {
-          var transcript = e.results[i][0].transcript;
-          if (e.results[i].isFinal) final += transcript;
-          else interim += transcript;
+          if (e.results[i].isFinal) final_ += e.results[i][0].transcript;
+          else interim += e.results[i][0].transcript;
         }
         if (interim) setHeard(interim);
-        if (final.trim()) handleCommand(final.trim());
+        if (final_.trim()) handleCommand(final_.trim());
       };
-
       _rec.onerror = function(e) {
-        if (e.error === 'no-speech') return; // ignore silences
-        if (e.error === 'not-allowed') { showToast('Microphone access denied', 'warning'); stopVoice(); return; }
-        setResult('Error: ' + e.error, 'err');
+        if (e.error === 'no-speech') return;
+        if (e.error === 'not-allowed') { showToast('Microphone access denied','warning'); stopVoice(); return; }
+        setResult('Error: '+e.error,'err');
       };
-
       _rec.onend = function() {
-        // Auto-restart to keep listening
-        if (_restartOnEnd && _active) {
-          try { _rec.start(); } catch(ex) {}
-        } else {
+        if (_restartOnEnd && _active) { try { _rec.start(); } catch(ex) {} }
+        else {
           _active = false;
-          var btn = document.getElementById('voiceBtn');
-          if (btn) btn.classList.remove('listening');
-          var hud = document.getElementById('voiceHUD');
-          if (hud) hud.classList.remove('active');
+          var btn = document.getElementById('voiceBtn'); if (btn) btn.classList.remove('listening');
+          var hud = document.getElementById('voiceHUD'); if (hud) hud.classList.remove('active');
         }
       };
-
-      try { _rec.start(); }
-      catch(ex) { showToast('Could not start voice: ' + ex.message, 'warning'); }
+      try { _rec.start(); } catch(ex) { showToast('Could not start voice: '+ex.message,'warning'); }
     };
-
     window.stopVoice = function() {
-      _restartOnEnd = false;
-      _active = false;
+      _restartOnEnd = false; _active = false;
       if (_rec) { try { _rec.stop(); } catch(ex) {} _rec = null; }
-      var btn = document.getElementById('voiceBtn');
-      if (btn) btn.classList.remove('listening');
-      var hud = document.getElementById('voiceHUD');
-      if (hud) hud.classList.remove('active');
+      var btn = document.getElementById('voiceBtn'); if (btn) btn.classList.remove('listening');
+      var hud = document.getElementById('voiceHUD'); if (hud) hud.classList.remove('active');
     };
-
-    // Voice command reference modal
     window.openVoiceCmds  = function() { document.getElementById('voiceCmdModal').classList.add('open'); };
     window.closeVoiceCmds = function() { document.getElementById('voiceCmdModal').classList.remove('open'); };
 
-    // Add V key shortcut to toggle voice
+    // V key shortcut
     document.addEventListener('keydown', function(e) {
       var tag = document.activeElement ? document.activeElement.tagName : '';
       if (['INPUT','TEXTAREA','SELECT'].includes(tag)) return;
@@ -8846,23 +8917,62 @@
   <div class="vcmd-wrap">
     <div class="vcmd-title">🎤 Voice Commands</div>
 
-    <div class="vcmd-section">Turn Control</div>
+    <div class="vcmd-section">Turn &amp; Phase</div>
     <div class="vcmd-row"><span class="vcmd-example">"next turn"</span><span class="vcmd-desc">Advance to next player's turn</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"previous turn"</span><span class="vcmd-desc">Go back a turn</span></div>
     <div class="vcmd-row"><span class="vcmd-example">"next phase"</span><span class="vcmd-desc">Advance the current phase</span></div>
-    <div class="vcmd-row"><span class="vcmd-example">"draw phase"</span><span class="vcmd-desc">Jump to a specific phase</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"battle phase"</span><span class="vcmd-desc">Jump to a specific phase (draw / standby / main one / battle / main two / end)</span></div>
 
     <div class="vcmd-section">Life Points</div>
-    <div class="vcmd-row"><span class="vcmd-example">"damage 800"</span><span class="vcmd-desc">Deal 800 to active player</span></div>
-    <div class="vcmd-row"><span class="vcmd-example">"deal 1500 to player 2"</span><span class="vcmd-desc">Deal LP to a named player</span></div>
-    <div class="vcmd-row"><span class="vcmd-example">"heal 500"</span><span class="vcmd-desc">Heal active player 500 LP</span></div>
-    <div class="vcmd-row"><span class="vcmd-example">"heal player 1 two thousand"</span><span class="vcmd-desc">Heal a specific player</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"damage 800"</span><span class="vcmd-desc">Deal 800 to default opponent</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"800"</span><span class="vcmd-desc">Bare number — damage to opponent</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"deal 1500 to player 2"</span><span class="vcmd-desc">Deal LP to a specific player</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"hit all 1000"</span><span class="vcmd-desc">Deal to all non-active players</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"heal 500"</span><span class="vcmd-desc">Heal active player</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"heal player 2 two thousand"</span><span class="vcmd-desc">Heal a specific player</span></div>
     <div class="vcmd-row"><span class="vcmd-example">"half"</span><span class="vcmd-desc">Halve active player's LP</span></div>
-    <div class="vcmd-row"><span class="vcmd-example">"undo"</span><span class="vcmd-desc">Undo last LP change (active player)</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"undo"</span><span class="vcmd-desc">Undo last LP change</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"reset lp"</span><span class="vcmd-desc">Restore all LP to starting amount</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"transfer lp"</span><span class="vcmd-desc">Open LP transfer panel</span></div>
+
+    <div class="vcmd-section">Timer</div>
+    <div class="vcmd-row"><span class="vcmd-example">"start timer"</span><span class="vcmd-desc">Start / resume the turn timer</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"pause"</span><span class="vcmd-desc">Pause the turn timer</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"stop timer"</span><span class="vcmd-desc">Stop and reset the turn timer</span></div>
+
+    <div class="vcmd-section">Coin &amp; Dice</div>
+    <div class="vcmd-row"><span class="vcmd-example">"flip coin"</span><span class="vcmd-desc">Open coin/dice and flip</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"roll dice"</span><span class="vcmd-desc">Open coin/dice and roll</span></div>
 
     <div class="vcmd-section">Game Actions</div>
     <div class="vcmd-row"><span class="vcmd-example">"surrender"</span><span class="vcmd-desc">Active player concedes</span></div>
-    <div class="vcmd-row"><span class="vcmd-example">"new game"</span><span class="vcmd-desc">Start a new game</span></div>
-    <div class="vcmd-row"><span class="vcmd-example">"commands"</span><span class="vcmd-desc">Show this command list</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"eliminate player 2"</span><span class="vcmd-desc">Manually eliminate a player</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"revive"</span><span class="vcmd-desc">Second chance for active player</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"three players"</span><span class="vcmd-desc">Set player count (2–6)</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"new game"</span><span class="vcmd-desc">Confirm and start a new game</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"rematch"</span><span class="vcmd-desc">Same players, fresh LP</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"add counter"</span><span class="vcmd-desc">Add a counter token to active player's card</span></div>
+
+    <div class="vcmd-section">Modals &amp; Navigation</div>
+    <div class="vcmd-row"><span class="vcmd-example">"calculator"</span><span class="vcmd-desc">Open the LP calculator</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"game log"</span><span class="vcmd-desc">Open the game log</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"match record"</span><span class="vcmd-desc">Open match history</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"card search"</span><span class="vcmd-desc">Open card search</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"deck builder"</span><span class="vcmd-desc">Open card search + deck builder</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"rulings"</span><span class="vcmd-desc">Open the rulings panel</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"roster"</span><span class="vcmd-desc">Open the player roster</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"sync"</span><span class="vcmd-desc">Open multiplayer sync panel</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"fullscreen"</span><span class="vcmd-desc">Toggle fullscreen</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"close"</span><span class="vcmd-desc">Close the active modal</span></div>
+
+    <div class="vcmd-section">Rulings</div>
+    <div class="vcmd-row"><span class="vcmd-example">"ask the ruling"</span><span class="vcmd-desc">Submit current ruling query to AI</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"add chain link"</span><span class="vcmd-desc">Add a link to the chain</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"remove chain link"</span><span class="vcmd-desc">Remove last chain link</span></div>
+    <div class="vcmd-row"><span class="vcmd-example">"clear ruling"</span><span class="vcmd-desc">Reset the ruling builder</span></div>
+
+    <div class="vcmd-section">Help</div>
+    <div class="vcmd-row"><span class="vcmd-example">"commands"</span><span class="vcmd-desc">Show this list</span></div>
 
     <button class="vcmd-close" onclick="closeVoiceCmds()">CLOSE</button>
   </div>
