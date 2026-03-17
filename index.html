@@ -3145,6 +3145,7 @@
         <select class="mode-select" id="team-format" onchange="renderModeModal()">
           <option value="2v2">2v2</option>
           <option value="3v3">3v3</option>
+          <option value="4v4">4v4</option>
         </select>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -3154,6 +3155,7 @@
             <div class="mode-player-slot" id="team-a-slot-1"><span class="mode-slot-label team-a">A1</span><select class="mode-slot-select"></select></div>
             <div class="mode-player-slot" id="team-a-slot-2"><span class="mode-slot-label team-a">A2</span><select class="mode-slot-select"></select></div>
             <div class="mode-player-slot" id="team-a-slot-3" style="display:none;"><span class="mode-slot-label team-a">A3</span><select class="mode-slot-select"></select></div>
+            <div class="mode-player-slot" id="team-a-slot-4" style="display:none;"><span class="mode-slot-label team-a">A4</span><select class="mode-slot-select"></select></div>
           </div>
         </div>
         <div>
@@ -3162,6 +3164,7 @@
             <div class="mode-player-slot" id="team-b-slot-1"><span class="mode-slot-label team-b">B1</span><select class="mode-slot-select"></select></div>
             <div class="mode-player-slot" id="team-b-slot-2"><span class="mode-slot-label team-b">B2</span><select class="mode-slot-select"></select></div>
             <div class="mode-player-slot" id="team-b-slot-3" style="display:none;"><span class="mode-slot-label team-b">B3</span><select class="mode-slot-select"></select></div>
+            <div class="mode-player-slot" id="team-b-slot-4" style="display:none;"><span class="mode-slot-label team-b">B4</span><select class="mode-slot-select"></select></div>
           </div>
         </div>
       </div>
@@ -5301,7 +5304,7 @@
     if (newGame) {
       // Restore base LP if we inflated it for team battle
       if (gameMode === 'team' && matchCtx) {
-        var count = matchCtx.format === '3v3' ? 3 : 2;
+        var count = matchCtx.format === '4v4' ? 4 : matchCtx.format === '3v3' ? 3 : 2;
         MAX_LP = Math.round(MAX_LP / count);
         document.getElementById('startingLPInput').value = MAX_LP;
       }
@@ -5947,9 +5950,9 @@
 
     // Team — refresh selects
     var fmt = document.getElementById('team-format');
-    var count = fmt ? (fmt.value === '3v3' ? 3 : 2) : 2;
+    var count = fmt ? (fmt.value === '4v4' ? 4 : fmt.value === '3v3' ? 3 : 2) : 2;
     ['a','b'].forEach(function(team, ti) {
-      for (var si = 1; si <= 3; si++) {
+      for (var si = 1; si <= 4; si++) {
         var row = document.getElementById('team-' + team + '-slot-' + si);
         if (!row) continue;
         row.style.display = si <= count ? 'flex' : 'none';
@@ -6281,8 +6284,8 @@
 
   // ── Team Battle ──────────────────────────────
   function startTeamBattle() {
-    var fmt   = document.getElementById('team-format').value; // '2v2' | '3v3'
-    var count = fmt === '3v3' ? 3 : 2;
+    var fmt   = document.getElementById('team-format').value; // '2v2' | '3v3' | '4v4'
+    var count = fmt === '4v4' ? 4 : fmt === '3v3' ? 3 : 2;
     var teamA = [], teamB = [];
     for (var i = 1; i <= count; i++) {
       var selA = document.querySelector('#team-a-slot-' + i + ' select');
