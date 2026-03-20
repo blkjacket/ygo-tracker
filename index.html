@@ -285,6 +285,9 @@
     transform: translateY(-1px);
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   }
+  .player-card.rotate-90:not(.eliminated):hover  { transform: rotate(90deg)  scale(0.92) translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+  .player-card.rotate-180:not(.eliminated):hover { transform: rotate(180deg) scale(0.92) translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+  .player-card.rotate-270:not(.eliminated):hover { transform: rotate(270deg) scale(0.92) translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
   .player-card.active {
     border-color: var(--active-glow);
     background: var(--active);
@@ -1098,6 +1101,11 @@
 
 
   /* ── Skull overlay ── */
+  .skull-overlay.forfeited { background: rgba(0,0,0,0.82); }
+  .skull-overlay.forfeited .elim-bg-text { color: rgba(255,255,255,0.06); }
+  .skull-overlay.forfeited .elim-label { color: #cccccc; letter-spacing: 6px; }
+  .skull-overlay.forfeited .elim-name { color: #ffffff; }
+  .skull-overlay.forfeited .skull-icon { font-size: clamp(48px, 8vw, 80px); opacity: 0.9; }
   .skull-overlay {
     display: none;
     position: absolute;
@@ -1286,8 +1294,9 @@
     opacity: 0.9;
     pointer-events: auto;
   }
-  .match-record span.wins  { color: #88ffbb; }
-  .match-record span.losses{ color: #ff8888; }
+  .match-record span.wins     { color: #88ffbb; }
+  .match-record span.losses   { color: #ff8888; }
+  .match-record span.forfeits { color: #bbbbbb; }
 
   /* ── Duel Summary overlay ── */
   #summaryOverlay {
@@ -2014,8 +2023,16 @@
   .csearch-input {
     flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
     border-radius:8px; color:var(--text); font-family:'Cinzel',serif; font-size:20px;
-    padding:14px 22px; outline:none; letter-spacing:1px;
+    padding:14px 48px 14px 22px; outline:none; letter-spacing:1px; width:100%;
   }
+  .csearch-input-wrap { position:relative; flex:1; display:flex; align-items:center; }
+  .csearch-clear-btn {
+    position:absolute; right:12px; top:50%; transform:translateY(-50%);
+    background:none; border:none; color:var(--dim); cursor:pointer;
+    font-size:18px; line-height:1; padding:4px 6px; border-radius:4px;
+    transition:color 0.15s, background 0.15s;
+  }
+  .csearch-clear-btn:hover { color:var(--text); background:rgba(255,255,255,0.08); }
   .csearch-input:focus { border-color:rgba(201,162,39,0.5); }
   .csearch-input::placeholder { color:var(--dim); font-size:18px; }
   .csearch-btn {
@@ -2730,6 +2747,18 @@
   .vcmd-desc { flex:1.2; color:var(--dim); font-size:12px; }
   .vcmd-close { display:block; margin:16px auto 0; font-family:'Cinzel',serif; font-size:10px; letter-spacing:2px; padding:7px 20px; border:1px solid var(--border); border-radius:4px; background:transparent; color:var(--dim); cursor:pointer; }
   .vcmd-close:hover { color:var(--gold); border-color:rgba(201,162,39,0.4); }
+  /* ── King of the Hill ── */
+  .koth-streak { display:inline-flex; align-items:center; gap:5px; background:rgba(201,162,39,0.15); border:1px solid rgba(201,162,39,0.4); border-radius:4px; font-family:'Cinzel',serif; font-size:11px; letter-spacing:1px; color:var(--gold); padding:3px 10px; margin-top:4px; }
+  .koth-streak-fire { font-size:14px; }
+  .koth-queue-item { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:4px; padding:6px 10px; cursor:grab; user-select:none; }
+  .koth-queue-item:active { cursor:grabbing; opacity:0.7; }
+  .koth-queue-drag { color:var(--dim); font-size:14px; }
+  .koth-queue-name { flex:1; font-family:'Rajdhani',sans-serif; font-size:14px; font-weight:600; }
+  .koth-queue-pos { font-family:'Cinzel',serif; font-size:9px; letter-spacing:1px; color:var(--dim); }
+  .koth-queue-del { background:none; border:none; color:var(--dim); cursor:pointer; font-size:14px; padding:0 4px; }
+  .koth-queue-del:hover { color:#ff8888; }
+  .koth-champion-banner { font-family:'Cinzel',serif; font-size:9px; letter-spacing:2px; color:var(--gold); background:rgba(201,162,39,0.1); border:1px solid rgba(201,162,39,0.25); border-radius:3px; padding:3px 10px; margin-bottom:8px; text-align:center; }
+
 </style>
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -2775,6 +2804,7 @@
 <div class="controls collapsed" id="gameMenu">
   <button class="btn btn-gold" onclick="openPlayersModal()">👤 Players</button>
   <button class="btn btn-mode" onclick="openModeModal()">&#x1F3C6; Mode</button>
+  <button class="btn btn-dim"  onclick="shuffleNow()" title="Randomly shuffle turn order" style="border-color:rgba(120,200,120,0.3);color:#99dd99;">🔀 Shuffle Order</button>
   <button class="btn btn-gold" onclick="openCalc()" style="letter-spacing:1px;">🧮 Calculator</button>
   <button class="btn btn-dim"  onclick="openLog()">📜 Game Log</button>
   <button class="btn btn-dim"  onclick="openRoster()">👥 Roster</button>
@@ -3020,7 +3050,7 @@
   <div class="summary-sub" id="summarySubtitle" style="font-family:'Cinzel',serif;font-size:10px;color:var(--dim);letter-spacing:3px;margin-bottom:8px;text-align:center;"></div>
   <div class="summary-buttons" id="summaryButtons">
     <button class="summary-btn gold" onclick="closeSummary(false)">↩ Review Board</button>
-    <button class="summary-btn dim"  onclick="closeSummary(false);openMatchHistory();">👥 Match Record</button>
+    <button class="summary-btn dim"  onclick="openMatchHistory();">👥 Match Record</button>
     <button class="summary-btn dim"  onclick="closeSummary(true)">✕ New Game</button>
   </div>
 </div>
@@ -3053,6 +3083,7 @@
       <span style="flex:1" class="roster-sort-hdr" onclick="setRosterSort('name')" id="rsorthdr-name">NAME</span>
       <span style="min-width:32px;text-align:center" class="roster-sort-hdr" onclick="setRosterSort('w')" id="rsorthdr-w">W</span>
       <span style="min-width:32px;text-align:center" class="roster-sort-hdr" onclick="setRosterSort('l')" id="rsorthdr-l">L</span>
+      <span style="min-width:32px;text-align:center" class="roster-sort-hdr" onclick="setRosterSort('f')" id="rsorthdr-f" style="color:#bbbbbb;">F</span>
       <span style="min-width:44px;text-align:center" class="roster-sort-hdr" onclick="setRosterSort('duels')" id="rsorthdr-duels">DUELS</span>
       <span style="min-width:40px;text-align:center" class="roster-sort-hdr" onclick="setRosterSort('pct')" id="rsorthdr-pct">WIN%</span>
       <span style="min-width:120px;text-align:center">ADJUST</span>
@@ -3082,6 +3113,7 @@
       <button class="mode-tab active" id="mtab-bestof"     onclick="switchModeTab('bestof')">&#x1F3AE; Best of X</button>
       <button class="mode-tab"        id="mtab-tournament" onclick="switchModeTab('tournament');renderModeModal();renderTournamentSlots()">&#x1F3C6; Tournament</button>
       <button class="mode-tab"        id="mtab-team"       onclick="switchModeTab('team');renderModeModal()">&#x1F91D; Team Battle</button>
+      <button class="mode-tab"        id="mtab-koth"       onclick="switchModeTab('koth');renderKothModal()">&#x1F451; King of the Hill</button>
       <button class="mode-tab"        id="mtab-rules"      onclick="switchModeTab('rules')">&#x2696;&#xFE0F; Rules</button>
       <button class="mode-tab"        id="mtab-sync"       onclick="switchModeTab('sync');openSyncModalPanel()">&#x1F534; Sync</button>
     </div>
@@ -3192,6 +3224,26 @@
         <button class="mode-start-btn" onclick="startTeamBattle()">&#x1F91D; Start Battle</button>
       </div>
     </div>
+    <!-- King of the Hill -->
+    <div class="mode-panel" id="mpanel-koth">
+      <div class="mode-section-title">&#x1F451; King of the Hill</div>
+      <p class="mode-info">The winner stays on. Challengers take turns from the queue. Win streak is tracked on the champion's card.</p>
+      <div class="mode-field" style="align-items:flex-start;flex-direction:column;gap:10px;">
+        <label>Queue (drag to reorder)</label>
+        <div id="koth-queue" style="display:flex;flex-direction:column;gap:6px;width:100%;max-height:220px;overflow-y:auto;padding-right:4px;"></div>
+        <div style="display:flex;gap:8px;width:100%;margin-top:4px;">
+          <select class="mode-select" id="koth-add-select" style="flex:1;">
+            <option value="">— Add player —</option>
+          </select>
+          <button class="mode-start-btn" style="padding:8px 16px;font-size:11px;" onclick="kothAddFromSelect()">+ Add</button>
+        </div>
+      </div>
+      <div class="mode-actions">
+        <button class="btn btn-dim" onclick="closeModeModal()">Cancel</button>
+        <button class="mode-start-btn" onclick="startKoth()">&#x1F451; Start</button>
+      </div>
+    </div>
+
     <!-- Rules -->
     <div class="mode-panel" id="mpanel-rules">
       <div class="mode-section-title">&#x2696;&#xFE0F; Game Rules</div>
@@ -3339,8 +3391,11 @@
       <div class="csearch-main">
         <!-- Search bar row -->
         <div class="csearch-row">
-          <input class="csearch-input" id="cardSearchInput" placeholder="Search by card name… (leave blank to filter only)" maxlength="80"
-            oninput="cardSearchDebounce()" onkeydown="if(event.key==='Enter')doCardSearch()">
+          <div class="csearch-input-wrap">
+            <input class="csearch-input" id="cardSearchInput" placeholder="Search by card name… (leave blank to filter only)" maxlength="80"
+              oninput="cardSearchDebounce();_updateClearBtn()" onkeydown="if(event.key==='Enter')doCardSearch()" onfocus="this.select();_updateClearBtn()">
+            <button class="csearch-clear-btn" id="cardSearchClear" onclick="clearCardSearch()" title="Clear search" style="display:none;">✕</button>
+          </div>
           <button class="csearch-filter-toggle" id="csFilterToggle" onclick="toggleCardFilters()">&#x25BC; Filters</button>
           <button class="csearch-btn" onclick="doCardSearch()">&#x1F50D; Search</button>
         </div>
@@ -3628,7 +3683,7 @@
   const PLAYER_COLOR_PRESETS = ['#c9a227','#e05555','#5599ff','#55cc88','#cc77ff','#ff9944'];
 
   // ── Game Mode State ──
-  let gameMode  = "standard"; // standard | bestof | tournament | team
+  let gameMode  = "standard"; // standard | bestof | tournament | team | koth
   let matchCtx  = null;       // mode-specific context object
 
   let gameLog = []; // { id, turn, phase, actor, target, amount, type, sign, oldLP, newLP }
@@ -3710,7 +3765,7 @@
   /* ── Init ─────────────────────────────── */
   function initPlayers(count) {
     players    = Array.from({ length: count }, (_, i) => ({
-      name: `Player ${i + 1}`, lp: MAX_LP, eliminated: false, turnOrder: i + 1, prevLP: MAX_LP
+      name: `Player ${i + 1}`, lp: MAX_LP, eliminated: false, forfeited: false, turnOrder: i + 1, prevLP: MAX_LP
     }));
     panelState = Array(count).fill(null);
     activeTurn = 0;
@@ -3724,7 +3779,7 @@
     dmgTypeState = {};
     matchRecord = players.map(function(p) {
       var k = p.name.trim().toLowerCase();
-      return roster[k] ? {w:roster[k].w, l:roster[k].l} : {w:0, l:0};
+      return roster[k] ? {w:roster[k].w, l:roster[k].l, f:roster[k].f||0} : {w:0, l:0, f:0};
     });
     rosterSave();
     lpOverTime  = Array(players.length).fill(null).map(() => [MAX_LP]);
@@ -3823,18 +3878,18 @@
               onchange="rosterOnNameChange(${i},this.value)">
           </div>
           ${(() => { const isW = !p.eliminated && players.length > 1 && players.filter(pl => !pl.eliminated).length === 1; return isW ? '<span class="winner-crown">👑</span>' : ''; })()}
-          ${!p.eliminated ? `<button class="btn-surrender" onclick="surrenderPlayer(${i})" title="Surrender (concede)">🏳️</button>` : ''}
+          ${!p.eliminated ? `<button class="btn-surrender" onclick="surrenderPlayer(${i})" title="Forfeit (concede)">🏳️</button>` : ''}
           ${i !== activeTurn && !p.eliminated ? `<button class="btn-collapse" onclick="toggleCardCollapse(${i})" title="Collapse/expand card" id="collapse-btn-${i}">${cardCollapsed[i] ? '▼' : '▲'}</button>` : ''}
           <div class="player-color-dot" style="background:${(playerColors&&playerColors[i])||PLAYER_COLOR_PRESETS[i%PLAYER_COLOR_PRESETS.length]}" onclick="cyclePlayerColor(${i})" title="Click to change accent color"></div>
           <button class="btn-rotate" onclick="rotateCard(${i})" title="Rotate card (tabletop mode)">⟳</button>
           <button class="btn-elim" onclick="toggleElim(${i})">${p.eliminated ? '↩' : '💀'}</button>
         </div>
 
-        <div class="skull-overlay ${p.eliminated ? 'visible' : ''}" id="skull-${i}">
-          <div class="elim-bg-text">Eliminated</div>
+        <div class="skull-overlay ${p.eliminated ? 'visible' : ''} ${p.forfeited ? 'forfeited' : ''}" id="skull-${i}">
+          <div class="elim-bg-text">${p.forfeited ? 'Forfeit' : 'Eliminated'}</div>
           <div class="elim-name">${p.name}</div>
-          <div class="elim-label">Eliminated</div>
-          <span class="skull-icon">☠️</span>
+          <div class="elim-label">${p.forfeited ? 'Forfeited' : 'Eliminated'}</div>
+          <span class="skull-icon">${p.forfeited ? '🏳️' : '☠️'}</span>
           <button class="second-chance-btn" onclick="secondChance(${i})">
             <span class="halo">😇</span> Second Chance?
           </button>
@@ -3850,8 +3905,9 @@
           <div class="lp-value ${getLPClass(p.lp)}" id="lp-val-${i}">${(function(){ if(gameMode==='team'&&teamLP.length&&matchCtx&&matchCtx.teams&&!matchCtx.separateLP){return(matchCtx.teams[0].indexOf(i)!==-1?teamLP[0]:teamLP[1]).toLocaleString();}return p.lp.toLocaleString();})()}</div>
           <div class="lp-label">Life Points</div>
           ${i !== activeTurn && !p.eliminated && players[activeTurn] && !players[activeTurn].eliminated ? `<div class="lp-diff" id="lp-diff-${i}">${(()=>{const me=(gameMode==='team'&&teamLP.length&&matchCtx&&matchCtx.teams&&!matchCtx.separateLP)?(matchCtx.teams[0].indexOf(activeTurn)!==-1?teamLP[0]:teamLP[1]):players[activeTurn].lp;const them=(gameMode==='team'&&teamLP.length&&matchCtx&&matchCtx.teams&&!matchCtx.separateLP)?(matchCtx.teams[0].indexOf(i)!==-1?teamLP[0]:teamLP[1]):p.lp;const d=them-me;return (d>0?'▲+':'▼')+d.toLocaleString();})()}</div>` : ''}
-          <div class="match-record">${(() => { var k=p.name.trim().toLowerCase(); var r=roster[k]||{w:0,l:0}; return '<span class="wins">'+r.w+'W</span> &middot; <span class="losses">'+r.l+'L</span>'; })()} </div>
+          <div class="match-record">${(() => { var k=p.name.trim().toLowerCase(); var r=roster[k]||{w:0,l:0,f:0}; var parts=['<span class="wins">'+r.w+'W</span>','<span class="losses">'+r.l+'L</span>']; if(r.f) parts.push('<span class="forfeits">'+r.f+'F</span>'); return parts.join(' &middot; '); })()} </div>
           ${biggestHit[i] > 0 ? `<div class="biggest-hit-badge" title="Biggest hit taken this duel">💥 ${biggestHit[i].toLocaleString()}</div>` : ''}
+          ${gameMode === 'koth' && matchCtx && matchCtx.champion === p.name && (matchCtx.streak||0) > 0 ? `<div class="koth-streak"><span class="koth-streak-fire">🔥</span> ${matchCtx.streak} WIN STREAK</div>` : ''}
         </div>
 
         <div class="lp-sparkline"><canvas id="spark-${i}" height="28"></canvas></div>
@@ -4236,11 +4292,13 @@
     players[i].eliminated = !players[i].eliminated;
     if (players[i].eliminated) {
       players[i].lp = 0;
+      players[i].forfeited = false; // manual elim is not a forfeit
       panelState[i] = null;
       render();
       playSound('eliminate');
       checkWinCondition();
     } else {
+      players[i].forfeited = false;
       render();
     }
   }
@@ -4251,6 +4309,7 @@
     p.lp = restoreLP;
     p.prevLP = 0;
     p.eliminated = false;
+    p.forfeited  = false;
     panelState[i] = null;
     render();
   }
@@ -4323,6 +4382,7 @@
     if (inp) MAX_LP = parseInt(inp.value) || MAX_LP;
     gameMode = "standard"; matchCtx = null;
     _duelHistory = [];
+    if (gameMode !== "koth") _kothQueue = [];
     updateMatchBanner();
     initPlayers(players.length);
     const header = document.getElementById('siteHeader');
@@ -4472,6 +4532,17 @@
     activeTurn = 0; currentPhase = 1; closePlayersModal(); render();
   }
 
+  function shuffleNow() {
+    // Shuffle turn order instantly without opening any modal
+    var shuffled = [...players].sort(function() { return Math.random() - 0.5; });
+    shuffled.forEach(function(p, i) { p.turnOrder = i + 1; });
+    players.sort(function(a, b) { return a.turnOrder - b.turnOrder; });
+    activeTurn = 0; currentPhase = 1;
+    render();
+    var names = players.map(function(p) { return p.name; }).join(' → ');
+    showToast('🔀 Order shuffled: ' + names, 'info', 3500);
+  }
+
 
   /* ── Timer ─────────────────────────────── */
   function fmt(s) {
@@ -4502,6 +4573,14 @@
   function timerToggle() {
     if (timerRunning) timerPause(); else timerStart();
   }
+  function _setMenuOpen(open) {
+    var menu = document.getElementById('gameMenu');
+    var btn  = document.getElementById('menuToggleBtn');
+    if (!menu) return;
+    menu.classList.toggle('collapsed', !open);
+    if (btn) btn.classList.toggle('open', open);
+  }
+
   function timerStart() {
     if (timerRunning) return;
     timerRunning = true;
@@ -4510,6 +4589,7 @@
     if (btn) { btn.textContent = '⏸ Pause'; btn.classList.remove('start'); btn.classList.add('pause'); }
     document.getElementById('gameTimerDisplay').classList.add('running');
     document.getElementById('turnTimerDisplay').classList.add('running');
+    _setMenuOpen(false); // collapse menu when game is running
   }
 
   function timerPause() {
@@ -4521,6 +4601,7 @@
     if (btn) { btn.textContent = '▶ Start'; btn.classList.remove('pause'); btn.classList.add('start'); }
     document.getElementById('gameTimerDisplay').classList.remove('running');
     document.getElementById('turnTimerDisplay').classList.remove('running');
+    _setMenuOpen(true); // open menu when timer is paused
   }
 
   function timerStop() {
@@ -4530,6 +4611,7 @@
     const td = document.getElementById('turnTimerDisplay');
     if (gd) gd.textContent = '00:00';
     if (td) { td.textContent = '00:00'; td.classList.remove('overtime'); }
+    _setMenuOpen(true);
   }
 
   function recordTurnAndAdvance(newActiveFn) {
@@ -4964,8 +5046,13 @@
 
 
 
+  var _logOpenedFromSummary = false; // track if log was opened from winner screen
+
   function openMatchHistory() {
+    // Hide summary overlay while log is open (log z-index is lower than summary)
+    document.getElementById('summaryOverlay').classList.remove('show');
     openLog();
+    _logOpenedFromSummary = true; // set after openLog (which clears it)
     setTimeout(function() {
       var histTab = document.querySelector('.log-tab:last-child');
       if (histTab) switchLogTab('history', histTab);
@@ -4974,6 +5061,7 @@
 
   /* ── Game Log ───────────────────────────── */
   function openLog() {
+    _logOpenedFromSummary = false; // reset unless set by openMatchHistory
     renderLog();
     renderTurnLog();
     renderMatchHistory();
@@ -5052,13 +5140,15 @@
       var rosterHtml = '<div style="font-family:\'Cinzel\',serif;font-size:9px;letter-spacing:3px;color:var(--dim);padding:4px 12px 8px;border-top:1px solid rgba(255,255,255,0.05);margin-top:4px;">ALL-TIME RECORDS</div>'
         + '<div class="match-history-grid">'
         + Object.values(roster).sort(function(a,b){ return (b.duels||0)-(a.duels||0)||a.name.localeCompare(b.name); }).map(function(r) {
-          var total = (r.w||0)+(r.l||0);
-          var pct   = total > 0 ? Math.round(r.w/total*100) : 0;
+          var total = (r.w||0)+(r.l||0)+(r.f||0);
+          var pct   = total > 0 ? Math.round((r.w||0)/total*100) : 0;
           return '<div class="match-history-card">'
             + '<div class="match-history-name">' + r.name + '</div>'
-            + '<div class="match-history-record"><span class="w">'+(r.w||0)+'</span>'
+            + '<div class="match-history-record"><span class="w">'+(r.w||0)+'W</span>'
             + '<span style="color:var(--dim)"> &middot; </span>'
-            + '<span class="l">'+(r.l||0)+'</span></div>'
+            + '<span class="l">'+(r.l||0)+'L</span>'
+            + ((r.f||0) > 0 ? '<span style="color:var(--dim)"> &middot; </span><span style="color:#bbbbbb">'+(r.f||0)+'F</span>' : '')
+            + '</div>'
             + '<div class="match-history-sub">'+pct+'% WIN &middot; '+(r.duels||0)+' DUELS</div>'
             + '</div>';
         }).join('') + '</div>';
@@ -5075,19 +5165,25 @@
       return;
     }
     body.innerHTML = '<div class="match-history-grid">' + entries.map(function(r) {
-      var total = (r.w||0)+(r.l||0);
-      var pct   = total > 0 ? Math.round(r.w/total*100) : 0;
+      var total = (r.w||0)+(r.l||0)+(r.f||0);
+      var pct   = total > 0 ? Math.round((r.w||0)/total*100) : 0;
       return '<div class="match-history-card">'
         + '<div class="match-history-name">' + r.name + '</div>'
-        + '<div class="match-history-record"><span class="w">'+(r.w||0)+'</span>'
+        + '<div class="match-history-record"><span class="w">'+(r.w||0)+'W</span>'
         + '<span style="color:var(--dim)"> &middot; </span>'
-        + '<span class="l">'+(r.l||0)+'</span></div>'
+        + '<span class="l">'+(r.l||0)+'L</span>'
+        + ((r.f||0) > 0 ? '<span style="color:var(--dim)"> &middot; </span><span style="color:#bbbbbb">'+(r.f||0)+'F</span>' : '')
+        + '</div>'
         + '<div class="match-history-sub">'+pct+'% WIN &middot; '+(r.duels||0)+' DUELS</div>'
         + '</div>';
     }).join('') + '</div>';
   }
   function closeLog() {
     document.getElementById('logModal').classList.remove('open');
+    if (_logOpenedFromSummary) {
+      _logOpenedFromSummary = false;
+      document.getElementById('summaryOverlay').classList.add('show');
+    }
   }
 
   function renderLog() {
@@ -5256,8 +5352,9 @@
     const alive = players.filter(function(p) { return !p.eliminated; });
     if (alive.length === 1 && players.length > 1) {
       setTimeout(function() {
-        if (gameMode === "bestof") { handleBestOfDuelEnd(alive[0]); }
+        if (gameMode === "bestof")      { handleBestOfDuelEnd(alive[0]); }
         else if (gameMode === "tournament") { handleTournamentDuelEnd(alive[0]); }
+        else if (gameMode === "koth")   { handleKothDuelEnd(alive[0]); }
         else { showSummary(alive[0]); }
       }, 900);
     }
@@ -5268,9 +5365,12 @@
     var wi = players.indexOf(winner);
     players.forEach(function(p, i) {
       var k = p.name.trim().toLowerCase();
-      if (!roster[k]) roster[k] = {name:p.name.trim(), w:0, l:0, duels:0};
-      roster[k].duels = (roster[k].duels||0) + 1;
-      if (i === wi) roster[k].w++; else roster[k].l++;
+      if (!roster[k]) roster[k] = {name:p.name.trim(), w:0, l:0, f:0, duels:0};
+      // Don't double-count a forfeit as a loss — forfeit already incremented duels in surrenderPlayer
+      var alreadyForfeited = players[i].forfeited;
+      if (!alreadyForfeited) roster[k].duels = (roster[k].duels||0) + 1;
+      if (i === wi) roster[k].w++;
+      else if (!alreadyForfeited) roster[k].l++;
       roster[k].name = p.name.trim();
     });
     // Record to session duel history
@@ -5288,7 +5388,7 @@
     });
     matchRecord = players.map(function(p) {
       var k = p.name.trim().toLowerCase();
-      return roster[k] ? {w:roster[k].w, l:roster[k].l} : {w:0, l:0};
+      return roster[k] ? {w:roster[k].w, l:roster[k].l, f:roster[k].f||0} : {w:0, l:0, f:0};
     });
     rosterSave();
     document.getElementById('summaryTitle').textContent = winner.name + ' Wins!';
@@ -5306,7 +5406,7 @@
         + '<div class="summary-stat-label">Biggest Hit Taken</div></div>'
         + '<div class="summary-stat"><div class="summary-stat-val">' + (function(){var dmg=gameLog.filter(function(e){return e.target===i&&e.sign==='damage';});var turns=Math.max(1,globalTurnNum-1);return Math.round(dmg.reduce(function(a,e){return a+e.amount;},0)/turns).toLocaleString();})() + '</div>'
         + '<div class="summary-stat-label">Avg Dmg/Turn</div></div>'
-        + '<div class="summary-stat"><div class="summary-stat-val">' + rec.w + 'W &middot; ' + rec.l + 'L</div>'
+        + '<div class="summary-stat"><div class="summary-stat-val">' + rec.w + 'W &middot; ' + rec.l + 'L' + (rec.f ? ' &middot; ' + rec.f + 'F' : '') + '</div>'
         + '<div class="summary-stat-label">Match Record</div></div>'
         + '</div>';
     }).join('');
@@ -5316,7 +5416,7 @@
     if (btns) btns.innerHTML =
       '<button class="summary-btn gold" onclick="closeSummary(false)">&#x21A9; Review Board</button>'
       + '<button class="summary-btn" style="color:#88ffbb;border-color:rgba(0,170,68,0.5);" onclick="rematch()">&#x1F503; Rematch</button>'
-      + '<button class="summary-btn dim" onclick="closeSummary(false);openMatchHistory();">&#x1F4CB; Match Record</button>'
+      + '<button class="summary-btn dim" onclick="openMatchHistory();">&#x1F4CB; Match Record</button>'
       + '<button class="summary-btn dim" onclick="closeSummary(true)">&#x2715; New Game</button>';
     playSound('win');
     document.getElementById('summaryOverlay').classList.add('show');
@@ -5331,6 +5431,8 @@
         MAX_LP = Math.round(MAX_LP / count);
         document.getElementById('startingLPInput').value = MAX_LP;
       }
+      // KotH cleanup
+      if (gameMode === 'koth') { _kothQueue = []; }
       gameMode = 'standard'; matchCtx = null; updateMatchBanner(); resetGame();
     }
   }
@@ -5453,6 +5555,7 @@
         case 'name':  return d * a.name.localeCompare(b.name);
         case 'w':     return d * ((b.w||0) - (a.w||0));
         case 'l':     return d * ((b.l||0) - (a.l||0));
+        case 'f':     return d * ((b.f||0) - (a.f||0));
         case 'duels': return d * ((b.duels||0) - (a.duels||0));
         case 'pct':   return d * (winPctB - winPctA);
         default:      return 0;
@@ -5465,8 +5568,8 @@
     list.innerHTML = '';
     entries.forEach(function(r) {
       var key = rosterKey(r.name);
-      var tot = (r.w||0)+(r.l||0);
-      var pct = tot>0 ? Math.round(r.w/tot*100) : 0;
+      var tot = (r.w||0)+(r.l||0)+(r.f||0);
+      var pct = tot>0 ? Math.round((r.w||0)/tot*100) : 0;
       var row = document.createElement('div');
       row.className = 'roster-row';
       row.setAttribute('data-rkey', key);
@@ -5474,6 +5577,7 @@
         '<span class="roster-row-name">' + r.name + '</span>'
         + '<span class="r-stat w">' + (r.w||0) + '</span>'
         + '<span class="r-stat l">' + (r.l||0) + '</span>'
+        + '<span class="r-stat f" style="color:#bbbbbb;">' + (r.f||0) + '</span>'
         + '<span class="r-stat d">' + (r.duels||0) + '</span>'
         + '<span class="r-stat pct">' + pct + '%</span>'
         + '<span class="r-adj">'
@@ -5481,6 +5585,8 @@
         +   '<button class="r-adj-btn rw" data-f="w" data-d="-1">W&#x2212;</button>'
         +   '<button class="r-adj-btn rl" data-f="l" data-d="1">L+</button>'
         +   '<button class="r-adj-btn rl" data-f="l" data-d="-1">L&#x2212;</button>'
+        +   '<button class="r-adj-btn" style="border-color:rgba(200,200,200,0.25);color:#bbbbbb;" data-f="f" data-d="1">F+</button>'
+        +   '<button class="r-adj-btn" style="border-color:rgba(200,200,200,0.25);color:#bbbbbb;" data-f="f" data-d="-1">F&#x2212;</button>'
         + '</span>'
         + '<button class="r-icon-btn" data-action="edit" title="Edit">&#x270F;&#xFE0F;</button>'
         + '<button class="r-icon-btn del" data-action="del" title="Remove">&#x1F5D1;</button>';
@@ -5501,7 +5607,7 @@
       list.appendChild(row);
     });
     // Update sort header indicators
-    ['name','w','l','duels','pct'].forEach(function(k) {
+    ['name','w','l','f','duels','pct'].forEach(function(k) {
       var hdr = document.getElementById('rsorthdr-' + k);
       if (!hdr) return;
       hdr.classList.toggle('active-sort', rosterSort.key === k);
@@ -5533,7 +5639,7 @@
   function rosterAdjust(key, field, delta) {
     if (!roster[key]) return;
     roster[key][field] = Math.max(0, (roster[key][field]||0) + delta);
-    roster[key].duels  = (roster[key].w||0) + (roster[key].l||0);
+    roster[key].duels  = (roster[key].w||0) + (roster[key].l||0) + (roster[key].f||0);
     rosterSave();
     renderRoster();
   }
@@ -5576,6 +5682,12 @@
   }
 
   function rosterOnNameChange(i, newName) {
+    // Revert to previous name if blank
+    if (!newName || !newName.trim()) {
+      var inp = document.querySelector('#card-' + i + ' .player-name');
+      if (inp) inp.value = players[i] ? players[i].name : ('Player ' + (i + 1));
+      return;
+    }
     var oldName = players[i].name;
     var oldKey  = rosterKey(oldName);
     var newKey  = rosterKey(newName);
@@ -6033,7 +6145,7 @@
         + '  (' + s[0] + '–' + s[1] + ')';
       if (btns) btns.innerHTML =
         '<button class="summary-btn gold" onclick="closeSummary(false)">&#x21A9; Review Board</button>'
-        + '<button class="summary-btn dim" onclick="closeSummary(false);openMatchHistory();">&#x1F4CB; Match Record</button>'
+        + '<button class="summary-btn dim" onclick="openMatchHistory();">&#x1F4CB; Match Record</button>'
         + '<button class="summary-btn dim" onclick="closeSummary(true)">&#x2715; End Match</button>';
     } else {
       matchCtx.duelNum++;
@@ -6304,12 +6416,15 @@
     var ri = matchCtx.currentRound;
     var mi = matchCtx.currentMatch;
     var match = matchCtx.rounds[ri][mi];
+    var gameNum = (match.scores.p1 + match.scores.p2) + 1;
     initPlayers(2);
     players[0].name = match.p1;
     players[1].name = match.p2;
     currentPhase = 1;
     render();
     updateMatchBanner();
+    // Side deck reminder between games
+    showToast('🃏 Side Deck access — Game ' + gameNum, 'info', 4000);
   }
 
   function tournamentNextMatch() {
@@ -6464,7 +6579,7 @@
     // update roster for all players
     players.forEach(function(p, i) {
       var k = p.name.trim().toLowerCase();
-      if (!roster[k]) roster[k] = {name:p.name.trim(), w:0, l:0, duels:0};
+      if (!roster[k]) roster[k] = {name:p.name.trim(), w:0, l:0, f:0, duels:0};
       roster[k].duels = (roster[k].duels||0) + 1;
       var onWinTeam = matchCtx.teams[winTeamIdx].indexOf(i) !== -1;
       if (onWinTeam) roster[k].w++; else roster[k].l++;
@@ -6487,7 +6602,7 @@
     var btns = document.getElementById('summaryButtons');
     if (btns) btns.innerHTML =
       '<button class="summary-btn gold" onclick="closeSummary(false)">&#x21A9; Review Board</button>'
-      + '<button class="summary-btn dim" onclick="closeSummary(false);openMatchHistory();">&#x1F4CB; Match Record</button>'
+      + '<button class="summary-btn dim" onclick="openMatchHistory();">&#x1F4CB; Match Record</button>'
       + '<button class="summary-btn dim" onclick="closeSummary(true)">&#x2715; New Game</button>';
     document.getElementById('summaryOverlay').classList.add('show');
   }
@@ -6536,6 +6651,16 @@
       score.innerHTML = '<span class="banner-player" style="color:#8899ff;">' + aNames + '</span>'
         + '<span class="banner-vs">vs</span>'
         + '<span class="banner-player" style="color:#ff8888;">' + bNames + '</span>';
+    } else if (gameMode === 'koth' && matchCtx) {
+      banner.classList.add('visible');
+      var streak = matchCtx.streak || 0;
+      label.textContent = '👑 KotH' + (streak > 1 ? ' · ' + streak + ' streak' : '');
+      bbtn.style.display = 'none';
+      var champ = matchCtx.champion || (players[0] ? players[0].name : '');
+      var next  = matchCtx.queue && matchCtx.queue.length > 0 ? matchCtx.queue[0] : '—';
+      score.innerHTML = '<span class="banner-player" style="color:var(--gold)">👑 ' + champ + '</span>'
+        + '<span class="banner-vs">vs</span>'
+        + '<span class="banner-player">' + next + '</span>';
     } else {
       banner.classList.remove('visible');
       if (bbtn) bbtn.style.display = 'none';
@@ -7195,11 +7320,28 @@
   }
 
   // ── Card Search Modal ────────────────────────────────────────
+  function clearCardSearch() {
+    var inp = document.getElementById('cardSearchInput');
+    if (inp) { inp.value = ''; inp.focus(); }
+    var clr = document.getElementById('cardSearchClear');
+    if (clr) clr.style.display = 'none';
+    // Clear results
+    var grid = document.getElementById('cardSearchGrid');
+    var status = document.getElementById('cardSearchStatus');
+    if (grid) grid.innerHTML = '';
+    if (status) status.textContent = '';
+  }
+  function _updateClearBtn() {
+    var inp = document.getElementById('cardSearchInput');
+    var clr = document.getElementById('cardSearchClear');
+    if (inp && clr) clr.style.display = inp.value.length > 0 ? 'block' : 'none';
+  }
+
   function openCardSearch() {
     document.getElementById('cardSearchModal').classList.add('open');
     setTimeout(function() {
       var inp = document.getElementById('cardSearchInput');
-      if (inp) inp.focus();
+      if (inp) { inp.focus(); inp.select(); _updateClearBtn(); }
     }, 80);
   }
 
@@ -7372,6 +7514,7 @@
 
   // ── Kick off DB init on page load ───────────────────────────
   cardDbInit();
+  _setMenuOpen(true); // menu open by default since timer starts stopped
 
   document.getElementById('cardSearchModal').addEventListener('click', function(e) {
     if (e.target === this) closeCardSearch();
@@ -8475,7 +8618,7 @@
   function openShortcutModal()  { document.getElementById('shortcutModal').classList.add('open'); }
   function closeShortcutModal() { document.getElementById('shortcutModal').classList.remove('open'); }
 
-  // ? key opens shortcuts, F key toggles fullscreen, Ctrl+Z = undo
+  // ? key opens shortcuts, F key toggles fullscreen, Ctrl+Z = undo, V = voice
   (function() {
     document.addEventListener('keydown', function(e) {
       var tag = document.activeElement ? document.activeElement.tagName : '';
@@ -8483,6 +8626,7 @@
       if (e.key === '?' || e.key === '/') { e.preventDefault(); openShortcutModal(); }
       if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey) { e.preventDefault(); toggleFullscreen(); }
       if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (players[activeTurn]) undoLP(activeTurn); }
+      if ((e.key === 'v' || e.key === 'V') && !e.ctrlKey && !e.metaKey) { e.preventDefault(); toggleVoice(); }
     }, false);
   })();
 
@@ -8496,13 +8640,24 @@
 
   // Surrender
   function surrenderPlayer(i) {
-    openConfirm(players[i].name + ' surrenders?', function() {
+    openConfirm(players[i].name + ' forfeits?', function() {
       players[i].lp = 0;
       players[i].eliminated = true;
+      players[i].forfeited  = true;
       panelState[i] = null;
+      // Track forfeit in roster
+      var k = rosterKey(players[i].name);
+      if (!roster[k]) roster[k] = {name: players[i].name.trim(), w:0, l:0, f:0, duels:0};
+      roster[k].f     = (roster[k].f || 0) + 1;
+      roster[k].duels = (roster[k].duels || 0) + 1;
+      rosterSave();
       playSound('eliminate');
       render();
-      checkWinCondition();
+      if (gameMode === 'team' && matchCtx && matchCtx.separateLP) {
+        checkTeamWinCondition();
+      } else {
+        checkWinCondition();
+      }
     });
   }
 
@@ -8798,6 +8953,16 @@
       }
 
       // ── COIN & DICE ──────────────────────────────────────────
+      // KotH next challenger
+      if (gameMode === 'koth' && /^(next challenger|next match|next opponent|send in the next)/.test(t)) {
+        if (matchCtx && matchCtx.queue && matchCtx.queue.length > 0) {
+          kothNextMatch(); setResult('Next challenger: ' + matchCtx.queue[0] + ' ✓', 'ok');
+        } else {
+          setResult('Queue is empty', 'err');
+        }
+        return;
+      }
+
       if (/^(flip coin|coin flip|flip a coin|toss coin)/.test(t)) {
         openCoinDice();
         setTimeout(function(){ flipCoin(); }, 200);
@@ -8962,14 +9127,228 @@
     window.openVoiceCmds  = function() { document.getElementById('voiceCmdModal').classList.add('open'); };
     window.closeVoiceCmds = function() { document.getElementById('voiceCmdModal').classList.remove('open'); };
 
-    // V key shortcut
-    document.addEventListener('keydown', function(e) {
-      var tag = document.activeElement ? document.activeElement.tagName : '';
-      if (['INPUT','TEXTAREA','SELECT'].includes(tag)) return;
-      if ((e.key === 'v' || e.key === 'V') && !e.ctrlKey && !e.metaKey) { e.preventDefault(); toggleVoice(); }
-    });
-
   }());
+
+  /* ══════════════════════════════════════════════════════════
+     KING OF THE HILL
+     ══════════════════════════════════════════════════════════ */
+
+  var _kothQueue = []; // mutable queue of names (not yet playing)
+  var _kothDragSrc = null;
+
+  function renderKothModal() {
+    // Populate add-player select from roster + current players
+    var rosterNames = Object.values(roster)
+      .sort(function(a,b) { return a.name.localeCompare(b.name); })
+      .map(function(r) { return r.name; });
+    players.forEach(function(p) {
+      var k = p.name.trim().toLowerCase();
+      if (!rosterNames.find(function(n) { return n.trim().toLowerCase() === k; }))
+        rosterNames.push(p.name.trim());
+    });
+    var sel = document.getElementById('koth-add-select');
+    if (sel) {
+      sel.innerHTML = '<option value="">— Add player —</option>'
+        + rosterNames.map(function(n) {
+            return '<option value="' + n + '">' + n + '</option>';
+          }).join('');
+    }
+    _renderKothQueue();
+  }
+
+  function _renderKothQueue() {
+    var container = document.getElementById('koth-queue');
+    if (!container) return;
+    if (!_kothQueue.length) {
+      container.innerHTML = '<div style="font-family:Cinzel,serif;font-size:10px;letter-spacing:2px;color:var(--dim);padding:10px 0;">Queue is empty \u2014 add players above</div>';
+      return;
+    }
+    container.innerHTML = _kothQueue.map(function(name, idx) {
+      return '<div class="koth-queue-item" draggable="true" data-idx="' + idx + '"'
+        + ' ondragstart="kothDragStart(event,' + idx + ')"'
+        + ' ondragover="event.preventDefault()"'
+        + ' ondrop="kothDrop(event,' + idx + ')">'
+        + '<span class="koth-queue-drag">⠿</span>'
+        + '<span class="koth-queue-pos">' + (idx + 1) + '</span>'
+        + '<span class="koth-queue-name">' + name + '</span>'
+        + '<button class="koth-queue-del" onclick="kothRemove(' + idx + ')" title="Remove">✕</button>'
+        + '</div>';
+    }).join('');
+  }
+
+  function kothAddFromSelect() {
+    var sel = document.getElementById('koth-add-select');
+    var name = sel ? sel.value.trim() : '';
+    if (!name) return;
+    if (_kothQueue.indexOf(name) >= 0) { showToast(name + ' is already in the queue', 'warning'); return; }
+    _kothQueue.push(name);
+    if (sel) sel.value = '';
+    _renderKothQueue();
+  }
+
+  function kothRemove(idx) {
+    _kothQueue.splice(idx, 1);
+    _renderKothQueue();
+  }
+
+  function kothDragStart(e, idx) { _kothDragSrc = idx; e.dataTransfer.effectAllowed = 'move'; }
+  function kothDrop(e, idx) {
+    e.preventDefault();
+    if (_kothDragSrc === null || _kothDragSrc === idx) return;
+    var item = _kothQueue.splice(_kothDragSrc, 1)[0];
+    _kothQueue.splice(idx, 0, item);
+    _kothDragSrc = null;
+    _renderKothQueue();
+  }
+
+  function startKoth() {
+    if (_kothQueue.length < 2) { showToast('Add at least 2 players to the queue', 'warning'); return; }
+    gameMode = 'koth';
+    // First match: 1st vs 2nd in queue
+    var champion   = _kothQueue[0];
+    var challenger = _kothQueue[1];
+    matchCtx = {
+      champion:   champion,
+      challenger: challenger,
+      queue:      _kothQueue.slice(2), // remaining queue
+      streak:     0,
+      duelNum:    1,
+      allTime:    {} // name -> wins
+    };
+    closeModeModal();
+    _kothSetupMatch(champion, challenger);
+    updateMatchBanner();
+    showToast('👑 King of the Hill — ' + champion + ' vs ' + challenger, 'info', 3000);
+  }
+
+  function _kothSetupMatch(p1, p2) {
+    initPlayers(2);
+    players[0].name = p1;
+    players[1].name = p2;
+    currentPhase = 1;
+    render();
+    updateMatchBanner();
+  }
+
+  function handleKothDuelEnd(winner) {
+    if (!matchCtx) return showSummary(winner);
+    var loser = players.find(function(p) { return p !== winner; });
+    var loserName = loser ? loser.name : '';
+
+    // Track all-time KotH wins
+    if (!matchCtx.allTime[winner.name]) matchCtx.allTime[winner.name] = 0;
+    matchCtx.allTime[winner.name]++;
+
+    if (winner.name === matchCtx.champion) {
+      // Champion wins — streak grows, loser goes to back of queue
+      matchCtx.streak++;
+      matchCtx.queue.push(loserName); // send challenger to back
+    } else {
+      // Challenger wins — new champion, old champion joins back of queue
+      matchCtx.queue.push(matchCtx.champion);
+      matchCtx.champion = winner.name;
+      matchCtx.streak = 1;
+    }
+
+    matchCtx.duelNum++;
+    showSummary(winner);
+
+    // Patch summary subtitle and buttons
+    var sub  = document.getElementById('summarySubtitle');
+    var btns = document.getElementById('summaryButtons');
+    var streak = matchCtx.streak;
+    if (sub) sub.textContent = '👑 KING OF THE HILL'
+      + (streak > 1 ? ' · 🔥 ' + streak + ' WIN STREAK' : '');
+
+    var nextChallenger = matchCtx.queue.length > 0 ? matchCtx.queue[0] : null;
+    if (btns) {
+      if (nextChallenger) {
+        btns.innerHTML =
+          '<button class="summary-btn gold" onclick="kothNextMatch()">⚔️ Next: ' + nextChallenger + '</button>'
+          + '<button class="summary-btn" style="color:#c0a0ff;border-color:rgba(160,120,255,0.4);" onclick="kothEditQueue()">📋 Edit Queue</button>'
+          + '<button class="summary-btn dim" onclick="openMatchHistory();">📋 Match Record</button>'
+          + '<button class="summary-btn dim" onclick="closeSummary(true)">✕ End KotH</button>';
+      } else {
+        // Queue exhausted — champion is unchallenged
+        btns.innerHTML =
+          '<button class="summary-btn gold" onclick="kothEditQueue()">📋 Add More Players</button>'
+          + '<button class="summary-btn dim" onclick="openMatchHistory();">📋 Match Record</button>'
+          + '<button class="summary-btn dim" onclick="closeSummary(true)">✕ End KotH</button>';
+        if (sub) sub.textContent = '👑 ' + matchCtx.champion.toUpperCase() + ' REIGNS SUPREME!';
+      }
+    }
+    updateMatchBanner();
+  }
+
+  function kothNextMatch() {
+    if (!matchCtx || !matchCtx.queue.length) return;
+    var challenger = matchCtx.queue.shift(); // take from front
+    matchCtx.challenger = challenger;
+    document.getElementById('summaryOverlay').classList.remove('show');
+    _kothSetupMatch(matchCtx.champion, challenger);
+    showToast('⚔️ ' + matchCtx.champion + ' vs ' + challenger, 'info', 2500);
+  }
+
+  function kothEditQueue() {
+    // Load current remaining queue into the editor
+    _kothQueue = matchCtx.queue.slice();
+    closeSummary(false);
+    openModeModal();
+    switchModeTab('koth');
+    renderKothModal();
+    // Change the Start button to a Save button, and add a Resume button
+    var actions = document.querySelector('#mpanel-koth .mode-actions');
+    if (actions) {
+      actions.innerHTML =
+        '<button class="btn btn-dim" onclick="kothCancelEdit()">✕ Cancel</button>'
+        + '<button class="mode-start-btn" onclick="kothSaveQueue()">✔ Save &amp; Resume</button>';
+    }
+    // Show champion banner above queue
+    var queueEl = document.getElementById('koth-queue');
+    if (queueEl && matchCtx) {
+      var champInfo = '<div class="koth-champion-banner">👑 Champion: ' + matchCtx.champion
+        + (matchCtx.streak > 0 ? '&nbsp;·&nbsp;🔥 ' + matchCtx.streak + (matchCtx.streak === 1 ? ' win' : ' win streak') : '') + '</div>';
+      queueEl.insertAdjacentHTML('beforebegin', champInfo);
+    }
+  }
+
+  function kothCancelEdit() {
+    // Close modal and return to winner screen
+    closeModeModal();
+    document.getElementById('summaryOverlay').classList.add('show');
+  }
+
+  function kothSaveQueue() {
+    // Save the edited queue back to matchCtx, close modal, return to winner screen
+    matchCtx.queue = _kothQueue.slice();
+    closeModeModal();
+    // Restore summary with refreshed buttons
+    document.getElementById('summaryOverlay').classList.add('show');
+    var btns = document.getElementById('summaryButtons');
+    var sub  = document.getElementById('summarySubtitle');
+    var nextChallenger = matchCtx.queue.length > 0 ? matchCtx.queue[0] : null;
+    if (sub) sub.textContent = '👑 KING OF THE HILL'
+      + (matchCtx.streak > 1 ? ' · 🔥 ' + matchCtx.streak + ' WIN STREAK' : '');
+    if (btns) {
+      if (nextChallenger) {
+        btns.innerHTML =
+          '<button class="summary-btn gold" onclick="kothNextMatch()">⚔️ Next: ' + nextChallenger + '</button>'
+          + '<button class="summary-btn" style="color:#c0a0ff;border-color:rgba(160,120,255,0.4);" onclick="kothEditQueue()">📋 Edit Queue</button>'
+          + '<button class="summary-btn dim" onclick="openMatchHistory();">📋 Match Record</button>'
+          + '<button class="summary-btn dim" onclick="closeSummary(true)">✕ End KotH</button>';
+      } else {
+        btns.innerHTML =
+          '<button class="summary-btn gold" onclick="kothEditQueue()">📋 Add More Players</button>'
+          + '<button class="summary-btn dim" onclick="openMatchHistory();">📋 Match Record</button>'
+          + '<button class="summary-btn dim" onclick="closeSummary(true)">✕ End KotH</button>';
+        if (sub) sub.textContent = '👑 ' + matchCtx.champion.toUpperCase() + ' — Queue Empty';
+      }
+    }
+    updateMatchBanner();
+  }
+
+
+
 
 </script>
 
