@@ -25,6 +25,7 @@
     --green: #00aa44;
     --text: #d0cce0;
     --dim: #5858a0;
+    --border: #1e1e3a;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -3885,6 +3886,7 @@
   <button class="btn btn-mode" onclick="openModeModal()">&#x1F3C6; Mode</button>
   <button class="btn btn-dim"  onclick="shuffleNow()" title="Randomly shuffle turn order" style="border-color:rgba(120,200,120,0.3);color:#99dd99;">🔀 Shuffle Order</button>
   <button class="btn btn-gold" onclick="openCalc()" style="letter-spacing:1px;">🧮 Calc</button>
+  <button class="btn btn-gold" onclick="openAllDmg()" style="letter-spacing:1px;">⚔️ Dmg All</button>
   <button class="btn btn-dim"  onclick="openLog()">📜 Game Log</button>
   <button class="btn btn-dim"  onclick="openRoster()">👥 Roster</button>
   <button class="btn btn-dim"  onclick="openCardSearch()">🃏 Cards</button>
@@ -4011,6 +4013,42 @@
       <button class="c-btn num" style="grid-column:span 2" onclick="calcNum('0')">0</button>
       <button class="c-btn num" onclick="calcDot()">.</button>
       <button class="c-btn equals" onclick="calcEquals()">=</button>
+    </div>
+    <!-- Apply result to player -->
+    <div class="calc-apply">
+      <div class="calc-apply-label">Apply Result to Player</div>
+      <div class="calc-apply-row">
+        <select id="calcPlayerSelect" class="calc-apply-select"></select>
+        <select id="calcSourceSelect" class="calc-apply-select">
+          <option value="-1">No source</option>
+        </select>
+      </div>
+      <div class="calc-apply-row" style="margin-top:6px;">
+        <button class="calc-apply-btn dmg" onclick="calcApply(-1)">− Damage</button>
+        <button class="calc-apply-btn heal" onclick="calcApply(1)">+ Heal</button>
+      </div>
+      <div class="calc-apply-divider"></div>
+      <!-- Apply to all players -->
+      <div class="calc-apply-label">Apply to All Players</div>
+      <div class="calc-apply-row">
+        <button class="calc-all-preset" onclick="calcApplyAll()">⚡ Damage All (result)</button>
+      </div>
+      <div class="calc-apply-divider"></div>
+      <!-- Battle damage calculator -->
+      <div class="calc-apply-label">Battle Damage Calc</div>
+      <div class="calc-apply-row">
+        <input type="number" id="battleAtk" placeholder="ATK" min="0" style="width:80px;background:rgba(255,255,255,0.06);border:1px solid var(--card-border);border-radius:3px;color:var(--text);font-family:'Rajdhani',sans-serif;font-size:13px;padding:5px 7px;text-align:center;" oninput="calcBattleDiff()">
+        <span style="color:var(--dim);font-size:11px;">vs</span>
+        <input type="number" id="battleDef" placeholder="DEF" min="0" style="width:80px;background:rgba(255,255,255,0.06);border:1px solid var(--card-border);border-radius:3px;color:var(--text);font-family:'Rajdhani',sans-serif;font-size:13px;padding:5px 7px;text-align:center;" oninput="calcBattleDiff()">
+      </div>
+      <div id="battleDiffResult" style="display:none;margin:6px 0;padding:6px 10px;border:1px solid rgba(255,255,255,0.07);border-radius:4px;text-align:center;">
+        <div id="battleDiffAmount" style="font-family:'Cinzel Decorative',serif;font-size:16px;"></div>
+        <div id="battleDiffLabel" style="font-size:10px;color:var(--dim);letter-spacing:1px;margin-top:2px;"></div>
+      </div>
+      <div class="calc-apply-row" style="margin-top:4px;">
+        <select id="battlePlayerSelect" class="calc-apply-select"></select>
+        <button class="calc-apply-btn dmg" onclick="applyBattleDiff()">Apply Dmg</button>
+      </div>
     </div>
   </div>
 </div>
@@ -4985,6 +5023,7 @@
   // ── Timer state ──
   let gameSeconds  = 0;
   let turnSeconds  = 0;
+  let _turnTimeLimitFired = false;
   let timerRunning = false;
   let timerInterval = null;
   // per-player turn logs: array of {turnNum, duration, totalAtEnd}
@@ -5165,7 +5204,7 @@
     const header = document.getElementById('siteHeader');
     if (!header) return;
     // Hide when a game is in progress (players have been set up with LP)
-    const gameActive = players.length > 0 && players.some(p => p.lp < MAX_LP || activeTurn >= 0);
+    const gameActive = players.length > 0 && players.some(p => p.lp < MAX_LP);
     header.classList.toggle('hidden', gameActive);
   }
 
@@ -5511,6 +5550,7 @@
       // Haptic feedback
       if (navigator.vibrate) navigator.vibrate(delta < 0 ? [30, 10, 30] : [20]);
       if (p.lp === 0) {
+        p.deathLP = old; // snapshot pre-death LP for secondChance restoration
         p.eliminated = true; panelState[i] = null; render();
         playSound('eliminate');
         if (gameMode === 'team' && matchCtx && (matchCtx.separateLP || matchCtx.vsOne)) {
@@ -5579,13 +5619,30 @@
       return;
     }
     const snap = lpHistory[i].pop();
+    var prevLPForLog = players[i] ? players[i].lp : 0;
     if (gameMode === 'team' && matchCtx && matchCtx.teams && snap.teamLP) {
       teamLP[0] = snap.teamLP[0];
       teamLP[1] = snap.teamLP[1];
+      // Un-eliminate any team members whose pool was restored above 0
+      matchCtx.teams.forEach(function(team, ti) {
+        if (teamLP[ti] > 0) {
+          team.forEach(function(pi) { if (players[pi]) players[pi].eliminated = false; });
+        }
+      });
     } else if (players[i]) {
       players[i].lp = snap.lp;
       if (players[i].lp > 0 && players[i].eliminated) players[i].eliminated = false;
     }
+    gameLog.push({
+      id: ++logEventId, turnNum: globalTurnNum,
+      turnName: players[activeTurn] ? players[activeTurn].name : '?',
+      phase: PHASES[currentPhase], target: i,
+      targetName: players[i] ? players[i].name : '?',
+      source: null, sourceName: null,
+      amount: Math.abs((players[i] ? players[i].lp : 0) - prevLPForLog),
+      type: 'undo', sign: 'undo',
+      oldLP: prevLPForLog, newLP: players[i] ? players[i].lp : 0
+    });
     render();
     showToast('↩ Undone', 'info');
   }
@@ -5678,8 +5735,9 @@
 
   function secondChance(i) {
     const p = players[i];
-    const restoreLP = p.prevLP > 0 ? p.prevLP : 1;
+    const restoreLP = (p.deathLP && p.deathLP > 0) ? p.deathLP : (p.prevLP > 0 ? p.prevLP : 1);
     p.lp = restoreLP;
+    p.deathLP = 0;
     p.prevLP = 0;
     p.eliminated = false;
     p.forfeited  = false;
@@ -5705,13 +5763,14 @@
       if (alive.length === 0) return;
       let n = (activeTurn - 1 + players.length) % players.length, t = 0;
       while (players[n].eliminated && t++ < players.length) n = (n-1+players.length) % players.length;
-      activeTurn = n; currentPhase = 0; render();
+      activeTurn = n;
+      // Turn 1: first player skips Draw Phase in Yu-Gi-Oh
+      currentPhase = (globalTurnNum <= 2 && n === 0) ? 1 : 0;
+      render();
     });
   }
   function updateTurnLabel() {
     const el = document.getElementById('turnLabel');
-    fbPushState(); // host sync after every render
-    if (_fbRoom && !_fbIsHost) fbPushGuestState(); // guest sync too
     // Update turn counter display
     const tc = document.getElementById('turnCounterDisplay');
     if (tc) tc.textContent = globalTurnNum - 1;
@@ -5754,9 +5813,9 @@
   function resetGame() {
     var inp = document.getElementById('startingLPInput');
     if (inp) MAX_LP = parseInt(inp.value) || MAX_LP;
+    if (gameMode !== "koth") _kothQueue = [];
     gameMode = "standard"; matchCtx = null;
     _duelHistory = [];
-    if (gameMode !== "koth") _kothQueue = [];
     updateMatchBanner();
     initPlayers(players.length);
     const header = document.getElementById('siteHeader');
@@ -5989,14 +6048,15 @@
     document.getElementById('gameTimerDisplay').textContent = fmt(gameSeconds);
     const td = document.getElementById('turnTimerDisplay');
     td.textContent = fmt(turnSeconds);
-    td.classList.toggle('overtime', turnSeconds >= 600);
+    var _overtimeSecs = (gameRules.turnTimeMinutes || 10) * 60;
+    td.classList.toggle('overtime', turnSeconds >= _overtimeSecs);
     // Sync in-card turn timer (shown when turnTimeLimit rule is active)
     if (gameRules.turnTimeLimit) {
       const inCard = document.getElementById('lp-turn-timer-' + activeTurn);
       if (inCard) {
         inCard.textContent = fmt(turnSeconds);
         inCard.classList.toggle('running', timerRunning);
-        inCard.classList.toggle('overtime', turnSeconds >= 600);
+        inCard.classList.toggle('overtime', turnSeconds >= _overtimeSecs);
       }
       const warnEl = document.getElementById('lp-turn-timer-warn-' + activeTurn);
       if (warnEl) {
@@ -6009,7 +6069,8 @@
     // Rule: auto-eliminate if turn exceeds limit
     if (gameRules.turnTimeLimit) {
       var limitSecs = (gameRules.turnTimeMinutes || 10) * 60;
-      if (turnSeconds >= limitSecs && activeTurn < players.length && !players[activeTurn].eliminated) {
+      if (turnSeconds >= limitSecs && activeTurn < players.length && !players[activeTurn].eliminated && !_turnTimeLimitFired) {
+        _turnTimeLimitFired = true;
         players[activeTurn].eliminated = true;
         panelState[activeTurn] = null;
         render();
@@ -6094,6 +6155,7 @@
     });
     globalTurnNum++;
     turnSeconds = 0;
+    _turnTimeLimitFired = false;
     const td = document.getElementById('turnTimerDisplay');
     if (td) { td.textContent = '00:00'; td.classList.remove('overtime'); }
     newActiveFn();
@@ -6192,6 +6254,17 @@
 
   function openCalc() {
     document.getElementById('calcModal').classList.add('open');
+    // Populate player selects
+    var opts = players.map(function(p, i) {
+      return '<option value="' + i + '"' + (p.eliminated ? ' disabled' : '') + '>' + escHtml(p.name) + (p.eliminated ? ' (elim)' : '') + '</option>';
+    }).join('');
+    var srcOpts = '<option value="-1">No source</option>' + players.map(function(p, i) {
+      return '<option value="' + i + '">' + escHtml(p.name) + '</option>';
+    }).join('');
+    ['calcPlayerSelect','battlePlayerSelect'].forEach(function(id) {
+      var el = document.getElementById(id); if (el) el.innerHTML = opts;
+    });
+    var srcEl = document.getElementById('calcSourceSelect'); if (srcEl) srcEl.innerHTML = srcOpts;
   }
 
   function calcCardBattle(i) {
@@ -6232,6 +6305,7 @@
     var target = diff > 0
       ? parseInt(document.getElementById('btgt-' + i).value)
       : i;
+    if (isNaN(target) || target < 0 || target >= players.length) return;
     adjustLP(target, -dmg, 'battle', diff > 0 ? i : null);
     // clear inputs after apply
     document.getElementById('batk-' + i).value = '';
@@ -7005,6 +7079,7 @@
   }
   function closeCoinDice() {
     document.getElementById('coinDiceModal').classList.remove('open');
+    document.getElementById('playersModal').classList.remove('open');
   }
   function _cdAnimate() {
     ['cdResult','cdResult2'].forEach(function(id) {
@@ -8683,15 +8758,19 @@
 
   function _getGameSnapshot() {
     return {
-      players:      JSON.parse(JSON.stringify(players)),
-      activeTurn:   activeTurn,
-      currentPhase: currentPhase,
-      globalTurnNum:globalTurnNum,
-      gameMode:     gameMode,
-      matchCtx:     matchCtx ? JSON.parse(JSON.stringify(matchCtx)) : null,
-      teamLP:       teamLP.slice(),
-      MAX_LP:       MAX_LP,
-      ts:           Date.now()
+      players:       JSON.parse(JSON.stringify(players)),
+      activeTurn:    activeTurn,
+      currentPhase:  currentPhase,
+      globalTurnNum: globalTurnNum,
+      gameMode:      gameMode,
+      matchCtx:      matchCtx ? JSON.parse(JSON.stringify(matchCtx)) : null,
+      teamLP:        teamLP.slice(),
+      MAX_LP:        MAX_LP,
+      cardCollapsed: cardCollapsed.slice(),
+      cardRotations: cardRotations.slice(),
+      counterTokens: JSON.parse(JSON.stringify(counterTokens)),
+      playerColors:  playerColors.slice(),
+      ts:            Date.now()
     };
   }
 
@@ -8726,6 +8805,10 @@
     matchCtx      = snap.matchCtx     || null;
     teamLP        = snap.teamLP       || [];
     if (snap.MAX_LP) MAX_LP = snap.MAX_LP;
+    if (snap.cardCollapsed) cardCollapsed = snap.cardCollapsed.slice();
+    if (snap.cardRotations) cardRotations = snap.cardRotations.slice();
+    if (snap.counterTokens) counterTokens = JSON.parse(JSON.stringify(snap.counterTokens));
+    if (snap.playerColors)  playerColors  = snap.playerColors.slice();
     // Restore guest's own LP so it doesn't get overwritten by stale host data
     if (savedLP !== null && players[_fbMySlot]) {
       players[_fbMySlot].lp        = savedLP;
@@ -11346,9 +11429,15 @@
       });
     }
 
+    var _apiKey = localStorage.getItem('ygo_anthropic_key') || '';
+    if (!_apiKey) {
+      typingEl.classList.remove('active'); btn.disabled = false;
+      _prependRulingCard(resultsEl, { q: question, a: '⚠️ No API key configured. Go to Settings → AI Rulings and enter your Anthropic API key.', source: 'ai', date: new Date().toLocaleDateString() });
+      return;
+    }
     fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': _apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514', max_tokens: 2000,
         system: _buildRulingsSystemPrompt(cardDataBlocks, false),
@@ -11431,9 +11520,15 @@
     if (notes) userMsg += '=== CONTEXT ===\n' + notes + '\n\n';
     userMsg += quickQ ? 'Answer the player\'s question, citing exact card text.' : 'Analyze how this chain resolves step by step.';
 
+    var _apiKey2 = localStorage.getItem('ygo_anthropic_key') || '';
+    if (!_apiKey2) {
+      typingEl.classList.remove('active'); askBtn.disabled = false;
+      _prependRulingCard(resultsEl, { q: qSummary, a: '⚠️ No API key configured. Go to Settings → AI Rulings and enter your Anthropic API key.', source: 'ai', date: new Date().toLocaleDateString() });
+      return;
+    }
     fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': _apiKey2, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514', max_tokens: 2000,
         system: _buildRulingsSystemPrompt(cardDataBlocks, true),
@@ -11817,6 +11912,7 @@
     if (isNaN(from) || isNaN(to) || isNaN(amt) || amt <= 0) { showToast('Enter a valid amount', 'warning'); return; }
     if (from === to) { showToast('Select different players', 'warning'); return; }
     if (!players[from] || players[from].eliminated) { showToast(players[from] ? players[from].name + ' is eliminated' : 'Invalid player', 'warning'); return; }
+    if (!players[to] || players[to].eliminated) { showToast(players[to] ? players[to].name + ' is eliminated — cannot transfer LP' : 'Invalid target player', 'warning'); return; }
     var actual = Math.min(amt, players[from].lp);
     if (actual <= 0) { showToast('Source player has no LP', 'warning'); return; }
     adjustLP(from, -actual, 'effect', null);
@@ -11857,6 +11953,11 @@
     var names = players.map(function(p) { return p.name; });
     var count = players.length;
     closeSummary(false);
+    // Reset Bo3 win scores so rematch starts fresh
+    if (gameMode === 'bestof' && matchCtx && Array.isArray(matchCtx.wins)) {
+      matchCtx.wins = matchCtx.wins.map(function() { return 0; });
+      matchCtx.duelNum = 1;
+    }
     initPlayers(count);
     // Restore player names after fresh init
     players.forEach(function(p, i) { if (names[i]) p.name = names[i]; });
@@ -12580,9 +12681,14 @@
       var mediaType = file.type || 'image/jpeg';
 
       // Send to Anthropic API for identification
+      var _scanKey = localStorage.getItem('ygo_anthropic_key') || '';
+      if (!_scanKey) {
+        result.innerHTML = '⚠️ No API key configured. Enter your Anthropic API key in Settings → AI Rulings to use card scanning.';
+        return;
+      }
       fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': _scanKey, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514', max_tokens: 300,
           system: 'You are a Yu-Gi-Oh! card identification expert. The user will show you an image of a Yu-Gi-Oh! card. Identify the card and respond with ONLY a JSON object: {"name": "exact card name", "confidence": "high/medium/low"}. If you cannot identify the card, respond with {"name": null, "confidence": "none", "reason": "brief explanation"}. Do not include any other text.',
